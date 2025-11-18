@@ -3,6 +3,7 @@ from tkinter import ttk
 
 # ============================================================
 # SCROLLABLE WIDGET
+
 class ListFrame(ttk.Frame):
     def __init__(self, master, text_data, item_height):
         super().__init__(master=master)
@@ -47,10 +48,13 @@ class ListFrame(ttk.Frame):
         if self.list_height >= self.winfo_height():
             height = self.list_height
             self.canvas.bind_all('<MouseWheel>', lambda event: self.canvas.yview_scroll(-int(event.delta/60), "units"))
+            self.scrollbar.place(relx=1, rely=0, relheight=1, anchor="ne")
+
             
         else:
             height = self.winfo_height()
             self.canvas.unbind_all('<MouseWheel>')
+            self.scrollbar.place_forget()
 
         self.canvas.create_window(
             (0, 0),

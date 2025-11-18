@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 
 # ============================================================
-# TKINTER WITH CLASSES 
+# CONVERTING A TKINTER APP TO USE CUSTOMTKINTER
 
 class App(tk.Tk):
     def __init__(self, title, size):
