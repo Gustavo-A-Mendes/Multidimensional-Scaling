@@ -1,29 +1,26 @@
 import tkinter as tk
-from tkinter import ttk
-import customtkinter as ctk
+# from tkinter import ttk
+import ttkbootstrap as ttk
 
 # ============================================================
-# CONVERTING A TKINTER APP TO USE CUSTOMTKINTER
+# TKINTER WITH CLASSES
 
-# Exercise:
-# Convert the App to use ctk:
-
-class App(ctk.CTk):
+class App(ttk.Window):
     def __init__(self, title, size):
-        
         # main setup:
-        super().__init__()
+        super().__init__(themename="journal")
         self.title(title)
         self.geometry(f"{size[0]}x{size[1]}")
         self.minsize(size[0], size[1])
-        
+
         # widgets:
         self.menu = Menu(self)
         self.main = Main(self)
 
         self.mainloop()
 
-class Menu(ctk.CTkFrame):
+
+class Menu(ttk.Frame):
     def __init__(self, master):
         super().__init__(master)
 
@@ -32,18 +29,18 @@ class Menu(ctk.CTkFrame):
         self.create_widgets()
 
     def create_widgets(self):
-        menu_button1 = ctk.CTkButton(self, text="Button 1")
-        menu_button2 = ctk.CTkButton(self, text="Button 2")
-        menu_button3 = ctk.CTkButton(self, text="Button 3")
+        menu_button1 = ttk.Button(self, text="Button 1", bootstyle="danger")
+        menu_button2 = ttk.Button(self, text="Button 2", bootstyle="success")
+        menu_button3 = ttk.Button(self, text="Button 3", bootstyle="dark")
 
-        menu_slider1 = ctk.CTkSlider(self, orientation="vertical", width=20)
-        menu_slider2 = ctk.CTkSlider(self, orientation="vertical", width=20)
+        menu_slider1 = ttk.Scale(self, orient="vertical", bootstyle="info")
+        menu_slider2 = ttk.Scale(self, orient="vertical", bootstyle="secondary")
 
-        toggle_frame = ctk.CTkFrame(self)
-        menu_toggle1 = ctk.CTkCheckBox(toggle_frame, text="check 1")
-        menu_toggle2 = ctk.CTkCheckBox(toggle_frame, text="check 2")
+        toggle_frame = ttk.Frame(self)
+        menu_toggle1 = ttk.Checkbutton(toggle_frame, text="check 1")
+        menu_toggle2 = ttk.Checkbutton(toggle_frame, text="check 2")
 
-        entry = ctk.CTkEntry(self)
+        entry = ttk.Entry(self)
 
         # create the grid:
         self.columnconfigure((0, 1, 2), weight=1, uniform='a')
@@ -54,8 +51,8 @@ class Menu(ctk.CTkFrame):
         menu_button2.grid(row=0, column=2, sticky="news", padx=4, pady=4)
         menu_button3.grid(row=1, column=0, sticky="news", columnspan=3, padx=4, pady=4)
 
-        menu_slider1.grid(row=2, column=0, rowspan=2, sticky="ns", pady=20)
-        menu_slider2.grid(row=2, column=2, rowspan=2, sticky="ns", pady=20)
+        menu_slider1.grid(row=2, column=0, rowspan=2, sticky="news", pady=20)
+        menu_slider2.grid(row=2, column=2, rowspan=2, sticky="news", pady=20)
 
         # toggle layout:
         toggle_frame.grid(row=4, column=0, sticky="news", columnspan=3)
@@ -66,7 +63,8 @@ class Menu(ctk.CTkFrame):
         # entry layout:
         entry.place(relx=0.5, rely=0.95, relwidth=0.9, anchor="center")
 
-class Main(ctk.CTkFrame):
+
+class Main(ttk.Frame):
     def __init__(self, master):
         super().__init__(master)
 
@@ -81,16 +79,18 @@ class Main(ctk.CTkFrame):
     def create_widgets(self):
         pass
 
-class Frame(ctk.CTkFrame):
+
+class Frame(ttk.Frame):
     def __init__(self, master, label_text, button_text, color):
         super().__init__(master)
 
-        label = ctk.CTkLabel(self, text=label_text, bg_color=color)
-        button = ctk.CTkButton(self, text=button_text)
+        label = ttk.Label(self, text=label_text, background=color)
+        button = ttk.Button(self, text=button_text)
 
         label.pack(expand=True, fill="both")
         button.pack(expand=True, fill="both", pady=10)
 
         self.pack(side="left", expand=True, fill="both", padx=20, pady=20)
+
 
 App("Class based app", (600, 600))
