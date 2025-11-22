@@ -5,8 +5,10 @@ import customtkinter as ctk
 # ============================================================
 # CONVERTING A TKINTER APP TO USE CUSTOMTKINTER
 
-# Exercise:
-# Convert the App to use ctk:
+""" 
+    EX18:
+        - Converta o App para usar ctk
+"""
 
 class App(ctk.CTk):
     def __init__(self, title, size):
