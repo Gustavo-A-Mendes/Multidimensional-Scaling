@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 
+from mds_app.analysis.mds_engine import MDSEngine
 from mds_app.data.dataset import Dataset
 from mds_app.ui.menubar import MenuBar
 from mds_app.ui.toolbar import ToolBar
@@ -39,23 +40,23 @@ class MainWindow:
         self.control_panel = ControlPanel(
             self.main_paned,
             self.dataset,
-            self.visualization_area.show_matrix
+            self.visualization_area
         )
 
         # menubar:
         self.menubar = MenuBar(
             self.root,
             self.dataset,
+            self.control_panel,
             self.visualization_area,
-            on_import=self.control_panel.refresh
         )
 
         # toolbar:
         self.toolbar = ToolBar(
             self.root,
             self.dataset,
-            self.visualization_area,
-            on_import=self.control_panel.refresh
+            self.control_panel,
+            self.visualization_area
         )
 
         # ----------------------------------------------------------------------
@@ -78,7 +79,7 @@ class MainWindow:
         self.root.configure(menu=self.menubar)  # adding menubar
 
         self.toolbar.pack(side="top", fill="x")
-        self.toolbar.pack_propagate(0)
+        self.toolbar.pack_propagate(False)
         self.main_paned.pack(fill="both", expand=True)
 
         # ----------------------------------------------------------------------

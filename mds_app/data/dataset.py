@@ -1,3 +1,5 @@
+from mds_app.data.participant import Participant
+
 class Dataset:
     def __init__(self):
         self.participants = []
@@ -5,22 +7,22 @@ class Dataset:
         self.selected_participants = []
         self.selected_headers = []
 
-    def set_participants(self, participant):
-        self.participants = list(participant)
+    def set_participants(self, participants: list[Participant]) -> None:
+        self.participants = participants
 
-    def add_participant(self, participant):
+    def add_participant(self, participant: Participant) -> None:
         self.participants.append(participant)
 
-    def set_headers(self, headers):
+    def set_headers(self, headers: list[str]) -> None:
         self.headers = list(headers)
 
-    def set_selected_headers(self, headers):
+    def set_selected_headers(self, headers: list[str]) -> None:
         self.selected_headers = list(headers)
 
-    def headers_match(self, headers):
-        return headers in self.headers
+    def headers_match(self, header: str) -> bool:
+        return header in self.headers
 
-    def add_header(self, header):
+    def add_header(self, header: str) -> bool:
         if self.headers_match(header):
             return False
 
@@ -31,7 +33,7 @@ class Dataset:
 
         return True
 
-    def can_remove_header(self, header):
+    def can_remove_header(self, header: str) -> bool:
         if not self.headers_match(header):
             return False
 
@@ -40,7 +42,7 @@ class Dataset:
                 return False
         return True
 
-    def remove_header(self, header):
+    def remove_header(self, header: str) -> bool:
         if not self.can_remove_header(header):
             return False
 

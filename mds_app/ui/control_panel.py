@@ -1,15 +1,14 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from mds_app.data.dataset import Dataset
 from mds_app.custom_widget.scrollable_frame import ScrollableFrame
 
 
 class ControlPanel(ttk.Frame):
-    def __init__(self, parent, dataset, on_update_view):
+    def __init__(self, parent, dataset, visualization_area):
         super().__init__(parent)
         self.dataset = dataset
-        self.on_update_view = on_update_view
+        self.visualization_area = visualization_area
         self.selected_participant = None
         self.highlight_checkbox = None
         self.highlight_values = tk.BooleanVar()
@@ -23,7 +22,8 @@ class ControlPanel(ttk.Frame):
 
         self._create_widgets()
 
-    def _create_widgets(self):
+    # create the control panel area:
+    def _create_widgets(self) -> None:
         self.scroll = ScrollableFrame(self)
         self.scroll.pack(fill="both", expand=True)
 
@@ -47,7 +47,8 @@ class ControlPanel(ttk.Frame):
 
         self.refresh()
 
-    def refresh(self):
+    # update the control panel information:
+    def refresh(self) -> None:
         if not self.dataset.participants:
             self.text_var.set(value="Nenhum dado encontrado")
         else:
@@ -61,8 +62,8 @@ class ControlPanel(ttk.Frame):
                 nav_frame = ttk.Frame(self.info_frame)
                 nav_frame.pack(pady=10)
 
-                ttk.Button(nav_frame, text="◀", width=5, command=self._data_nav("anterior")).grid(row=0, column=0, padx=5)
-                ttk.Button(nav_frame, text="▶", width=5, command=self._data_nav("proximo")).grid(row=0, column=1, padx=5)
+                ttk.Button(nav_frame, text="◀", width=5, command=lambda: self._data_nav("anterior")).grid(row=0, column=0, padx=5)
+                ttk.Button(nav_frame, text="▶", width=5, command=lambda: self._data_nav("proximo")).grid(row=0, column=1, padx=5)
 
                 ttk.Separator(self.info_frame).pack(fill="x", pady=10)
 
@@ -83,7 +84,7 @@ class ControlPanel(ttk.Frame):
                 label_nivel = ttk.Label(self.info_frame, textvariable=self.level_var)
                 label_nivel.pack(padx=10, pady=10)
 
-                self.set_data(idx)
+                self.get_metadata(idx)
 
             if not self.listbox:
                 self.listbox = tk.Listbox(self.info_frame, height=8)
@@ -110,19 +111,20 @@ class ControlPanel(ttk.Frame):
         self.info_label.pack(padx=10, pady=10)
 
         if self.combobox:
-            nomes = [p["name"] for p in self.dataset.participants]
-            self.combobox["values"] = nomes
+            names = [p.name for p in self.dataset.participants]
+            self.combobox["values"] = names
             self.combobox.current(0)
 
         if self.listbox:
             self.listbox.delete(0, tk.END)
             for p in self.dataset.participants:
-                self.listbox.insert(tk.END, p["pid"])
+                self.listbox.insert(tk.END, p.pid)
 
         if self.highlight_checkbox:
             self.highlight_values.set(False)
 
-    def _on_select(self, event):
+    # update de control panel and visualization when interact with combobox or listbox:
+    def _on_select(self, event: tk.Event) -> None:
         idx_listbox = self.listbox.curselection()
         idx_combobox = self.combobox.current()
 
@@ -132,50 +134,50 @@ class ControlPanel(ttk.Frame):
         elif idx_combobox:
             idx = idx_combobox
 
-        if not idx:
+        if idx is None:
             return
 
         self.combobox.current(idx)
-        self.set_data(idx)
+        self.get_metadata(idx)
 
         self.selected_participant = self.dataset.participants[idx]
         headers = self.dataset.selected_headers
-        self.on_update_view(self.selected_participant, headers, self.highlight_values.get())
+        self.visualization_area.show_matrix(self.selected_participant, headers, self.highlight_values.get())
 
-    def _data_nav(self, move):
-        def inner_function():
-            idx = self.combobox.current()
+    # update de control panel and visualization when interact with combobox buttons:
+    def _data_nav(self, move: str) -> None:
+        idx = self.combobox.current()
 
-            if not self.dataset or idx < 0:
-                return
+        if not self.dataset or idx < 0:
+            return
 
-            if move == "anterior":
-                if idx > 0:
-                    idx -= 1
-                    self.combobox.current(idx)
+        if move == "anterior":
+            if idx > 0:
+                idx -= 1
+                self.combobox.current(idx)
 
-            elif move == "proximo":
-                if idx < len(self.dataset.participants) - 1:
-                    idx += 1
-                    self.combobox.current(idx)
+        elif move == "proximo":
+            if idx < len(self.dataset.participants) - 1:
+                idx += 1
+                self.combobox.current(idx)
 
-            self.set_data(idx)
-            self.selected_participant = self.dataset.participants[idx]
-            headers = self.dataset.selected_headers
-            self.on_update_view(self.selected_participant, headers, self.highlight_values.get())
+        self.get_metadata(idx)
+        self.selected_participant = self.dataset.participants[idx]
+        headers = self.dataset.selected_headers
+        self.visualization_area.show_matrix(self.selected_participant, headers, self.highlight_values.get())
 
-        return inner_function
-
-    def _hightlight_values(self):
+    # calls highlight method of visualization area:
+    def _hightlight_values(self) -> None:
         idx = [self.combobox.current()]
         if not idx:
             return
 
         self.selected_participant = self.dataset.participants[idx[0]]
         headers = self.dataset.selected_headers
-        self.on_update_view(self.selected_participant, headers, self.highlight_values.get())
+        self.visualization_area.show_matrix(self.selected_participant, headers, self.highlight_values.get())
 
-    def set_data(self, idx):
-        self.name_var.set(value=f"Nome: {self.dataset.participants[idx]["name"]}")
-        self.group_var.set(value=f"Nome: {self.dataset.participants[idx]["group"]}")
-        self.level_var.set(value=f"Nome: {self.dataset.participants[idx]["level"]}")
+    # get information about the participant:
+    def get_metadata(self, idx) -> None:
+        self.name_var.set(value=f"Nome: {self.dataset.participants[idx].name}")
+        self.group_var.set(value=f"Grupo: {self.dataset.participants[idx].group}")
+        self.level_var.set(value=f"Level: {self.dataset.participants[idx].familiarity_level}")

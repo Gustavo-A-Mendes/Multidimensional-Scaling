@@ -1,7 +1,11 @@
-import numpy as np
 import tkinter as tk
 from tkinter import ttk
+
+import pandas as pd
 from tksheet import Sheet
+
+from mds_app.data.dataset import Dataset
+from mds_app.data.participant import Participant
 
 
 class VisualizationArea(ttk.Frame):
@@ -11,7 +15,7 @@ class VisualizationArea(ttk.Frame):
         self._create_widgets()
 
     # create the visualization area (notebook):
-    def _create_widgets(self):
+    def _create_widgets(self) -> None:
         # ----------------------------------------------------------------------
         # creating widgets:
         # ----------------------------------------------------------------------
@@ -44,7 +48,7 @@ class VisualizationArea(ttk.Frame):
         self.notebook.pack(fill="both", expand=True)
 
     # plot dataframe in visualization area:
-    def show_dataframe(self, dataset, index=0):
+    def show_dataframe(self, dataset: Dataset, index: int = 0) -> None:
         # ----------------------------------------------------------------------
         # clear layout:
         # ----------------------------------------------------------------------
@@ -106,7 +110,7 @@ class VisualizationArea(ttk.Frame):
         self.show_matrix(participant, headers)
 
     # configure and stilyze data placement:
-    def show_matrix(self, data, headers, highlight=False):
+    def show_matrix(self, data: Participant, headers: list[str], highlight: bool = False) -> None:
         if not data:
             return
 
@@ -120,7 +124,7 @@ class VisualizationArea(ttk.Frame):
         # -----------------------------
         # define sheet header and index:
         # -----------------------------
-        df = data["df"].loc[headers, headers]
+        df = data.dataframe.loc[headers, headers]
         # headers = headers
         # print(headers)
         self.sheet.headers(headers)
@@ -170,7 +174,7 @@ class VisualizationArea(ttk.Frame):
         self.sheet.refresh()
 
     @staticmethod
-    def value_to_color(df, r, c):
+    def value_to_color(df: pd.DataFrame, r: int, c: int) -> str:
         v = df.iloc[r, c]
 
         if v == 0:

@@ -1,18 +1,20 @@
 # from wsgiref.validate import header_re
+from pathlib import Path
 from tkinter import simpledialog, messagebox
 
 import pandas as pd
 import numpy as np
+from mds_app.data.participant import Participant
 from mds_app.utils.validators import *
 
 
 # load a *.cls file and return dataframe:
-def load_csv(filepath):
+def load_csv(filepath: Path) -> pd.DataFrame:
     df = pd.read_csv(filepath)
     return df
 
 # load a *.xlsx file and return dataframe (it enables read multi-sheet file):
-def load_excel(filepath):
+def load_excel(filepath: Path) -> dict[str, pd.DataFrame] | None:
     dfs = pd.read_excel(filepath, sheet_name=None)
 
     # detects multi-sheet file
@@ -33,9 +35,8 @@ def load_excel(filepath):
     return dfs
 
 # return a list with headers of dataframe (used to filter the forms headers):
-def get_header(df):
+def get_header(df: pd.DataFrame) -> list[str]:
     keywords = []
-    colunas_validas = []
 
     for col in df.columns:
         # continuando...
@@ -57,7 +58,7 @@ def get_header(df):
     return keywords
 
 # converts forms sheet into a list of dict, containing participant data:
-def separate_df(df, file_type, file_ext):
+def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file_ext: str) -> tuple[list[Participant], list[str]] | None:
     """Carrega o CSV em um DataFrame temporário"""
     participants_data = []
     names_temp = []
@@ -66,8 +67,7 @@ def separate_df(df, file_type, file_ext):
     keywords = []
     data_columns = []
 
-    if file_ext == ".csv":
-
+    if file_ext == ".csv" and isinstance(df, pd.DataFrame):
         if file_type == "ambiguous":
             pass
 
@@ -93,13 +93,14 @@ def separate_df(df, file_type, file_ext):
             group = f"Aluno"
             level = f""
 
-            participant_data = {
-                "pid": num_participants,
-                "name": name,
-                "group": group,
-                "level": level,
-                "df": df
-            }
+
+            participant_data = Participant(
+                pid=num_participants,
+                name=name,
+                group=group,
+                familiarity_level=level,
+                dataframe=df
+            )
 
             participants_data.append(participant_data)
 
@@ -138,7 +139,7 @@ def separate_df(df, file_type, file_ext):
                 data_columns.append(col)
 
             # generate matrices and building participants infos:
-            for idx, row in df.iterrows():
+            for idx in range(len(df)):
 
                 # DataFrame quadrado vazio (index = nome das linhas)
                 mat = pd.DataFrame(0, index=keywords, columns=keywords, dtype=float)
@@ -146,7 +147,7 @@ def separate_df(df, file_type, file_ext):
                 for col in data_columns:
                     column = col.split("-")[1].strip()
                     a, b = [x.strip() for x in column.split(" e ")]
-                    valor = row[col]
+                    valor = df.loc[idx, col]
                     mat.at[a, b] = int(valor)
                     mat.at[b, a] = int(valor)
 
@@ -161,17 +162,16 @@ def separate_df(df, file_type, file_ext):
                 group = f"Aluno" if pd.isna(groups_temp[idx]) else groups_temp[idx]
                 level = f"Básico" if pd.isna(levels_temp[idx]) else levels_temp[idx]
 
-                participant_data = {
-                    "pid": num_participants,
-                    "name": name,
-                    "group": group,
-                    "level": level,
-                    "df": mat
-                }
-
+                participant_data = Participant(
+                    pid=num_participants,
+                    name=name,
+                    group=group,
+                    familiarity_level=level,
+                    dataframe=mat
+                )
                 participants_data.append(participant_data)
 
-    elif file_ext == ".xlsx" or file_ext == ".xls":
+    elif (file_ext == ".xlsx" or file_ext == ".xls") and isinstance(df, dict):
         if file_type == "ambiguous":
             pass
 
@@ -182,6 +182,7 @@ def separate_df(df, file_type, file_ext):
             # Adjust matrix index column,
             for key, value in df.items():
 
+                key = str(key)
                 # check is the sheet has an index name column:
                 has_index_col = "Unnamed: 0" in value.columns
 
@@ -199,16 +200,16 @@ def separate_df(df, file_type, file_ext):
                 num_participants = len(participants_data)
 
                 name = f"Aluno {num_participants}" if pd.isna(key) else key
-                group = f"Aluno" if (pd.isna(key) and "Aluno" in key) else key
+                group = f"Aluno" if (not pd.isna(key) and "Aluno" in key) else "Professor"
                 level = f""
 
-                participant_data = {
-                    "pid": num_participants,
-                    "name": name,
-                    "group": group,
-                    "level": level,
-                    "df": value
-                }
+                participant_data = Participant(
+                    pid=num_participants,
+                    name=name,
+                    group=group,
+                    familiarity_level=level,
+                    dataframe=value
+                )
 
                 participants_data.append(participant_data)
 
@@ -250,7 +251,7 @@ def separate_df(df, file_type, file_ext):
                 data_columns.append(col)
 
             # generate matrices and building participants infos:
-            for idx, row in df_temp.iterrows():
+            for idx in range(len(df_temp)):
 
                 # DataFrame quadrado vazio (index = nome das linhas)
                 mat = pd.DataFrame(0, index=keywords, columns=keywords, dtype=float)
@@ -258,7 +259,7 @@ def separate_df(df, file_type, file_ext):
                 for col in data_columns:
                     column = col.split("-")[1].strip()
                     a, b = [x.strip() for x in column.split(" e ")]
-                    valor = row[col]
+                    valor = df_temp.loc[idx, col]
                     mat.at[a, b] = int(valor)
                     mat.at[b, a] = int(valor)
 
@@ -273,16 +274,15 @@ def separate_df(df, file_type, file_ext):
                 group = f"Aluno" if pd.isna(groups_temp[idx]) else groups_temp[idx]
                 level = f"Básico" if pd.isna(levels_temp[idx]) else levels_temp[idx]
 
-                participant_data = {
-                    "pid": num_participants,
-                    "name": name,
-                    "group": group,
-                    "level": level,
-                    "df": mat
-                }
+                participant_data = Participant(
+                    pid=num_participants,
+                    name=name,
+                    group=group,
+                    familiarity_level=level,
+                    dataframe=mat
+                )
 
                 participants_data.append(participant_data)
 
     headers = keywords
-
     return participants_data, headers
