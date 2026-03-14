@@ -5,6 +5,7 @@ from tkinter import simpledialog, messagebox
 class ImportDialog(tk.Toplevel):
     def __init__(self, parent, headers, on_confirm):
         super().__init__(parent)
+        self.parent = parent
         self.title("Revisão de Cabeçalhos")
         self.geometry("400x250")
 
@@ -150,6 +151,9 @@ class ImportDialog(tk.Toplevel):
             return
 
         selected = self.lb_selected.get(0, "end")
+        # self.parent.btn_mds.config(state="normal")
+        self.parent.control_panel.view = "data"
+
         self.on_confirm(selected)
         self.grab_release()
         self.destroy()

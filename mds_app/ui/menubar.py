@@ -89,7 +89,7 @@ class MenuBar(tk.Menu):
                 self.dataset.set_selected_headers(new_headers)
 
                 # show first participant
-                self.visualization_area.show_dataframe(self.dataset, index=0)
+                self.visualization_area.create_dataframe(self.dataset, index=0)
 
                 self.on_import()
 
