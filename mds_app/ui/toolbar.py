@@ -6,7 +6,6 @@ from tkinter import ttk, filedialog, messagebox
 from mds_app.ui.import_dialog import ImportDialog
 from mds_app.utils.csv_loader import *
 from mds_app.utils.validators import *
-from mds_app.ui.mds_session import MDSSession
 
 
 class ToolBar(ttk.Frame):
@@ -27,18 +26,33 @@ class ToolBar(ttk.Frame):
         # ----------------------------------------------------------------------
 
         # button
-        self.btn_import = ttk.Button(self, text="Importar Dados", command=self.import_csv)
-        self.btn_manual = ttk.Button(self, text="Inserir Manualmente")
-        self.btn_manage = ttk.Button(self, text="Gerenciar Dados")
-        self.btn_mds = ttk.Button(self, text="Análise MDS", command= lambda: MDSSession(self, self.dataset))
+        self.btn_import = ttk.Button(
+            self,
+            text="Importar Dados",
+            command=self.import_csv
+        )
+        # self.btn_manual = ttk.Button(
+        #     self,
+        #     text="Inserir Manualmente"
+        # )
+        # self.btn_manage = ttk.Button(
+        #     self,
+        #     text="Gerenciar Dados"
+        # )
+        # self.btn_mds = ttk.Button(
+        #     self,
+        #     text="Análise MDS",
+        #     command= lambda: MDSSession(self, self.dataset),
+        #     state="disabled"
+        # )
 
         # ----------------------------------------------------------------------
         # setting layout:
         # ----------------------------------------------------------------------
         self.btn_import.pack(side="left", padx=5)
-        self.btn_manual.pack(side="left", padx=5)
-        self.btn_manage.pack(side="left", padx=5)
-        self.btn_mds.pack(side="left", padx=5)
+        # self.btn_manual.pack(side="left", padx=5)
+        # self.btn_manage.pack(side="left", padx=5)
+        # self.btn_mds.pack(side="left", padx=5)
 
     # toolbar methods:
     def import_csv(self) -> None:
@@ -77,16 +91,25 @@ class ToolBar(ttk.Frame):
                 messagebox.showerror("Erro", "Nenhuma informação válida encontrada.")
                 return
 
-            def on_confirm(new_headers):
-                self.dataset.set_selected_headers(new_headers)
+            # def on_confirm(new_headers):
+            #     self.dataset.set_selected_headers(new_headers)
+            #
+            #     # show first participant
+            #     self.visualization_area.show_dataframe(self.dataset, index=0)
+            #
+            #     self.control_panel.refresh()
+            #
+            # dialog = ImportDialog(self, headers, on_confirm)
+            # self.wait_window(dialog)
+            self.dataset.set_selected_headers(headers)
 
-                # show first participant
-                self.visualization_area.show_dataframe(self.dataset, index=0)
+            self.dataset.calc_mean()
 
-                self.control_panel.refresh()
+            self.visualization_area.create_dataframe(self.dataset, index=0)
+            self.visualization_area.create_mds(self.dataset, self.control_panel.tags, index=0)
+            self.control_panel.view = "data"
 
-            dialog = ImportDialog(self.parent, headers, on_confirm)
-            self.wait_window(dialog)
+            self.control_panel.refresh()
 
         except Exception as e:
             messagebox.showerror("Erro ao importar CSV", str(e))
