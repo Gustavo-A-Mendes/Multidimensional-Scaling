@@ -3,31 +3,46 @@ from tkinter import ttk, messagebox
 
 from mds_app.custom_widget.scrollable_frame import ScrollableFrame
 
+from typing import Union, TYPE_CHECKING
+
+# if TYPE_CHECKING:
+from mds_app.data.dataset import Dataset
+from mds_app.data.participant import Participant
+from mds_app.ui.visualization_area import VisualizationArea
 
 class ControlPanel(ttk.Frame):
-    def __init__(self, parent, dataset, visualization_area):
+    def __init__(self, parent, dataset: Dataset, visualization_area: VisualizationArea) -> None:
         super().__init__(parent)
         self.dataset = dataset
         self.visualization_area = visualization_area
-        self.view = None
-        self.selected_participant = None
-        self.combobox = None
-        self.listbox = None
-        self.name_var = None
-        self.group_var = None
-        self.level_var = None
+
+        self.selected_participant: Participant | None = None
+        self.view: str | None = None
+
+        self.combobox: ttk.Combobox | None  = None
+        self.name_var: tk.StringVar | None  = None
+        self.group_var: tk.StringVar | None = None
+        self.level_var: tk.StringVar | None = None
 
         # plot attributes:
-        self.highlight_checkbox = None
+        self.highlight_checkbox: ttk.Checkbutton | None = None
         self.highlight_values = tk.BooleanVar(value=False)
-        self.destaque_view_checkbox = None
+
+        self.destaque_view_checkbox: ttk.Checkbutton | None = None
         self.destaque_view_values = tk.BooleanVar(value=True)
-        self.mean_view_checkbox = None
+
+        self.mean_view_checkbox: ttk.Checkbutton | None = None
         self.mean_view_values = tk.BooleanVar(value=False)
-        self.dispersion_view_checkbox = None
+
+        self.dispersion_view_checkbox: ttk.Checkbutton | None   = None
         self.dispersion_view_values = tk.BooleanVar(value=False)
 
-        self.tags = [self.highlight_values, self.destaque_view_values, self.mean_view_values, self.dispersion_view_values]
+        self.tags: list[tk.BooleanVar] = [
+            self.highlight_values,
+            self.destaque_view_values,
+            self.mean_view_values,
+            self.dispersion_view_values
+        ]
 
         self.configure(width=250)
 
@@ -35,7 +50,7 @@ class ControlPanel(ttk.Frame):
 
     # create the control panel area:
     def _create_widgets(self) -> None:
-        self.scroll = ScrollableFrame(self)
+        self.scroll: ScrollableFrame = ScrollableFrame(self)
         self.scroll.pack(fill="both", expand=True)
 
         content_frame = self.scroll.content
@@ -57,10 +72,8 @@ class ControlPanel(ttk.Frame):
         # create attribute to contain mds frame:
         self.mds_info_frame = None
 
-
         self.data_info_frame.pack(fill="x", pady=10)
         self.refresh()
-
 
     # update the control panel information:
     def refresh(self) -> None:
@@ -106,16 +119,9 @@ class ControlPanel(ttk.Frame):
                 self.get_metadata(idx)
 
             # --------------------------------------------------
-            # listbox navigation:
-            if not self.listbox:
-                self.listbox = tk.Listbox(self.data_info_frame, height=8)
-                self.listbox.bind("<<ListboxSelect>>", self._on_select)
-
-                ttk.Separator(self.data_info_frame).pack(fill="x", pady=10)
-                self.listbox.pack(fill="x", padx=10)
-
-            # --------------------------------------------------
             # plot control:
+
+            ttk.Separator(self.data_info_frame).pack(fill="x", pady=10)
 
             # highlight:
             if not self.highlight_checkbox:
@@ -172,20 +178,6 @@ class ControlPanel(ttk.Frame):
                 self.combobox["values"] = names
                 self.combobox.current(0)
 
-            if self.listbox:
-                self.listbox.delete(0, tk.END)
-                for p in self.dataset.participants:
-                    self.listbox.insert(tk.END, p.pid)
-
-            # if self.highlight_checkbox:
-            #     self.highlight_values.set(False)
-            # if self.destaque_view_checkbox:
-            #     self.destaque_view_values.set(True)
-            # if self.mean_view_checkbox:
-            #     self.mean_view_values.set(False)
-            # if self.dispersion_view_checkbox:
-            #     self.dispersion_view_values.set(False)
-
         elif self.view == "mds":
             pass
 
@@ -193,33 +185,23 @@ class ControlPanel(ttk.Frame):
 
     # update de control panel and visualization when interact with combobox or listbox:
     def _on_select(self, event: tk.Event) -> None:
-        idx_listbox = self.listbox.curselection()
-        idx_combobox = self.combobox.current()
+        idx: int = self.combobox.current()
 
-        print(idx_listbox)
-        print(idx_combobox)
-
-        idx = None
-        if idx_listbox:
-            idx = idx_listbox[0]
-        else:
-            idx = idx_combobox
-
-        print(idx)
+        # print(idx)
         if idx is None:
             return
 
         self.combobox.current(idx)
         self.get_metadata(idx)
 
+        headers: list[str] = self.dataset.selected_headers
         self.selected_participant = self.dataset.participants[idx]
-        headers = self.dataset.selected_headers
         self.visualization_area.show_matrix(self.selected_participant, headers, self.highlight_values.get())
         self.visualization_area.show_mds(self.dataset, self.selected_participant, self.tags, idx)
 
     # update de control panel and visualization when interact with combobox buttons:
     def _data_nav(self, move: str) -> None:
-        idx = self.combobox.current()
+        idx: int = self.combobox.current()
 
         if not self.dataset or idx < 0:
             return
@@ -235,8 +217,9 @@ class ControlPanel(ttk.Frame):
                 self.combobox.current(idx)
 
         self.get_metadata(idx)
-        self.selected_participant = self.dataset.participants[idx]
+
         headers = self.dataset.selected_headers
+        self.selected_participant = self.dataset.participants[idx]
         self.visualization_area.show_matrix(self.selected_participant, headers, self.highlight_values.get())
         self.visualization_area.show_mds(self.dataset, self.selected_participant, self.tags, idx)
 
@@ -246,8 +229,8 @@ class ControlPanel(ttk.Frame):
         if not idx:
             return
 
-        self.selected_participant = self.dataset.participants[idx[0]]
         headers = self.dataset.selected_headers
+        self.selected_participant = self.dataset.participants[idx[0]]
         self.visualization_area.show_matrix(self.selected_participant, headers, self.highlight_values.get())
         self.visualization_area.show_mds(self.dataset, self.selected_participant, self.tags, idx[0])
 
@@ -284,7 +267,7 @@ class ControlPanel(ttk.Frame):
         self.visualization_area.show_mds(self.dataset, self.selected_participant, self.tags, idx[0])
 
     # get information about the participant:
-    def get_metadata(self, idx) -> None:
+    def get_metadata(self, idx: int) -> None:
         self.name_var.set(value=f"Nome: {self.dataset.participants[idx].name}")
         self.group_var.set(value=f"Grupo: {self.dataset.participants[idx].group}")
         self.level_var.set(value=f"Level: {self.dataset.participants[idx].familiarity_level}")

@@ -1,13 +1,13 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tksheet import Sheet
 
 import numpy as np
 import pandas as pd
 from matplotlib.collections import PathCollection
 from matplotlib.patches import Ellipse
-from tksheet import Sheet
 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
@@ -15,13 +15,13 @@ from mds_app.data.dataset import Dataset
 from mds_app.data.participant import Participant
 
 class VisualizationArea(ttk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent) -> None:
         super().__init__(parent)
-        self.sheet = None
-        self.notebook = None
+        self.sheet: Sheet | None            = None
+        self.notebook: ttk.Notebook | None  = None
         self.mds_session = None
 
-        self.id = None
+        self.id: int | None = None
         self.destaque = None
         self.mean = None
         self.dispersion = None
@@ -175,6 +175,10 @@ class VisualizationArea(ttk.Frame):
 
         self.canvas = FigureCanvasTkAgg(self.fig, self.mds_plot)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
+
+        self.nav_toolbar = NavigationToolbar2Tk(self.canvas, self.mds_plot)
+        self.nav_toolbar.update()
+        self.nav_toolbar.pack()
 
         self.show_mds(dataset, dataset.participants[index], tags, index)
         # self.show_group_mds(dataset)

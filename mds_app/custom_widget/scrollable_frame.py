@@ -7,7 +7,7 @@ class ScrollableFrame(ttk.Frame):
         and a ScrollBar
     '''
 
-    def __init__(self, parent):
+    def __init__(self, parent: tk.Widget) -> None:
         super().__init__(parent)
         # ----------------------------------------------------------------------
         # creating widgets:
@@ -56,7 +56,7 @@ class ScrollableFrame(ttk.Frame):
         self.scrollbar.grid(row=0, column=1, sticky="ns")
 
     # update scrollbar when window size changes (content frame):
-    def _on_content_configure(self, event):
+    def _on_content_configure(self, event: tk.Event) -> None:
         self.canvas.itemconfigure(self.window_id, width=event.width)
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -69,7 +69,7 @@ class ScrollableFrame(ttk.Frame):
             self.scrollbar.grid_forget()
 
     # update scrollbar when window size changes (canvas):
-    def _on_canvas_configure(self, event):
+    def _on_canvas_configure(self, event: tk.Event) -> None:
         self.canvas.itemconfigure(self.window_id, width=event.width)
 
         if self.content.winfo_reqheight() > self.canvas.winfo_height():
@@ -80,15 +80,15 @@ class ScrollableFrame(ttk.Frame):
             self.scrollbar.grid_forget()
 
     # create mouse binding when canvas is in focus:
-    def _bind_mousewheel(self, event):
+    def _bind_mousewheel(self, event: tk.Event) -> None:
         if self.content.winfo_height() > self.winfo_height():
             self.content.bind_all("<MouseWheel>", lambda event: self.canvas.yview_scroll(-int(event.delta / 120), "units"))
 
     # delete mouse binding when canvas isn't in focus:
-    def _unbind_mousewheel(self, event):
+    def _unbind_mousewheel(self, event: tk.Event) -> None:
         self.content.unbind_all("<MouseWheel>")
 
     # used to update the scrollbar when widget changes:
-    def refresh(self):
+    def refresh(self) -> None:
         self.content.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))

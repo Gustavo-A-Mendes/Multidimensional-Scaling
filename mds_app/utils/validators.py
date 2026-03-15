@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+#
 def is_valid_value(value) -> bool:
     if value == "-":
         return True
@@ -10,10 +11,11 @@ def is_valid_value(value) -> bool:
     except ValueError:
         return False
 
-
+#
 def dataframe_has_pending(df: pd.DataFrame) -> bool:
     return (df == "-").any().any()
 
+#
 def compare_headers(existing, incoming):
     return {
         "missing": list(set(existing) - set(incoming)),

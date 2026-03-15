@@ -1,20 +1,24 @@
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import scipy
 from scipy.linalg import orthogonal_procrustes
 
 from mds_app.data.participant import Participant
 
+Matrix = npt.NDArray[np.float64]
+
 class Dataset:
-    def __init__(self):
-        self.participants = []
-        self.headers = []
-        self.selected_participants = []
-        self.selected_headers = []
-        self.centroids = []
-        self.stds = []
-        self.alinhados = []
+    def __init__(self) -> None:
+        self.participants: list[Participant] | None             = None
+        self.headers: list[str] | None                          = None
+        self.selected_participants: list[Participant] | None    = None
+        self.selected_headers: list[str] | None                 = None
+
+        self.centroids: Matrix | None   = None
+        self.stds: Matrix | None        = None
+        self.alinhados: Matrix | None   = None
 
     def set_participants(self, participants: list[Participant]) -> None:
         self.participants = participants
@@ -65,7 +69,7 @@ class Dataset:
 
     #
     @staticmethod
-    def rigid_procrustes(ref, target):
+    def rigid_procrustes(ref: Matrix, target: Matrix) -> Matrix:
         """
         Alinha 'target' a 'ref' sem alterar a escala (apenas rotação e translação).
         """
@@ -93,7 +97,7 @@ class Dataset:
         alinhados = [referencia]
 
         for i in range(1, len(coord_array)):
-            m2= self.rigid_procrustes(referencia, coord_array[i])
+            m2 = self.rigid_procrustes(referencia, coord_array[i])
             alinhados.append(m2)
 
         # 2. Calcula o centróide (média de cada ponto x,y)
@@ -107,10 +111,10 @@ class Dataset:
         for i in range (len(self.participants)):
             self.participants[i].mds_result.X_aligned = self.alinhados[i]
 
-        print(self.alinhados)
-        print(self.centroids)
+        # print(self.alinhados)
+        # print(self.centroids)
 
-    def get_global_limits(self):
+    def get_global_limits(self) -> tuple[float, float]:
         # Concatena todas as matrizes X_aligned em uma única nuvem de pontos
         todas_coords = np.vstack([p.mds_result.X_aligned for p in self.participants])
 

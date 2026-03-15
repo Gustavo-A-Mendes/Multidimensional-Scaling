@@ -1,8 +1,11 @@
 from math import sqrt, dist
-from typing import Union
 import numpy as np
+import numpy.typing as npt
+from typing import Union
 import pandas as pd
 from scipy.spatial.distance import pdist, squareform
+
+Matrix = npt.NDArray[np.float64]
 
 class MDSEngine:
     """
@@ -63,25 +66,24 @@ class MDSEngine:
                 'precomputed'
                     Input is already a dissimilarity matrix.
         """
-        self.n_components = n_components
-        self.dissimilarity = dissimilarity
-        self.method = method
+        self.n_components: int  = n_components
+        self.dissimilarity: str = dissimilarity
+        self.method: str        = method
 
         # Core data:
-        # self.data = None
-        self.D = None
-        self.labels = None
-        self.n = None # self.D.shape[0]
+        self.D: Matrix | None           = None
+        self.labels: list[str] | None   = None
+        self.n: int | None              = None # self.D.shape[0]
 
         # Intermediate results:
-        self.gram_ = None
-        self.eigenvalues = None
+        self.gram_: Matrix | None       = None
+        self.eigenvalues: Matrix | None = None
 
         # Final results:
-        self.X = None
-        self.X_aligned = None
-        self.D_hat = None
-        self.stress = None
+        self.X: Matrix | None           = None
+        self.X_aligned: Matrix | None   = None
+        self.D_hat: Matrix | None       = None
+        self.stress: float | None       = None
 
     # ----------------------------------------------------------------------
     # Public Methods
@@ -96,6 +98,8 @@ class MDSEngine:
             ----------
             data : array-like
                 Input data or dissimilarity matrix.
+            method : str
+                Set MDS method (algebraic or iterative)
         """
 
         calc_method = method if method else self.method
@@ -112,7 +116,7 @@ class MDSEngine:
         # self.D, self.gram_, self.mds_data, self.stress = self.compute(X)
 
     # Fit the model and return the embedding:
-    def fit_transform(self, data : Union[np.ndarray, pd.DataFrame], method : str = None) -> np.ndarray:
+    def fit_transform(self, data : Union[np.ndarray, pd.DataFrame], method : str = None) -> Matrix:
         """
             Fit the model and return the embedding.
 
@@ -120,6 +124,8 @@ class MDSEngine:
             ----------
             data : array-like
                 Input data or dissimilarity matrix.
+            method : str
+                Set MDS method (algebraic or iterative)
 
             Returns
             -------
@@ -141,8 +147,8 @@ class MDSEngine:
         # Validação extra: O algébrico NÃO aceita NaNs
         if np.any(np.isnan(self.D)):
             # Aqui você pode aplicar a imputação por média discutida antes
-            media = np.nanmean(self.D)
-            self.D = np.where(np.isnan(self.D), media, self.D)
+            media = np.nanmean(self.D, dtype=np.float64)
+            self.D = np.where(np.isnan(self.D), media, self.D)  # np.where([condition], [isTrue], [isFalse]
 
         # Compute Gram matrix:
         self.gram_ = self.__gram_matrix()
@@ -196,7 +202,7 @@ class MDSEngine:
 
     # Compute pairwise Euclidean distance matrix:
     @staticmethod
-    def __euclidean_distance(data: Union[np.ndarray, list]) -> np.ndarray:
+    def __euclidean_distance(data: Union[np.ndarray, list]) -> Matrix:
         """
             Compute pairwise Euclidean distance matrix.
 
@@ -214,7 +220,7 @@ class MDSEngine:
         return squareform(pdist(data, metric="euclidean"))
 
     # Compute the Gram matrix from the dissimilarity matrix:
-    def __gram_matrix(self) -> np.ndarray:
+    def __gram_matrix(self) -> Matrix:
         """
             Compute the Gram matrix from the dissimilarity matrix.
 
@@ -239,7 +245,7 @@ class MDSEngine:
         return G
 
     # Perform eigenvalue decomposition of the Gram matrix:
-    def __spectral_decomposition(self, matrix: np.ndarray) -> np.ndarray:
+    def __spectral_decomposition(self, matrix: np.ndarray) -> Matrix:
         """
             Perform eigenvalue decomposition of the Gram matrix.
 
@@ -295,8 +301,7 @@ class MDSEngine:
         # Máscara para pegar apenas i < j:
         mask = np.triu(np.ones(self.D.shape), k=1).astype(bool)
 
-        num = np.sum((self.D[mask] - self.D_hat[mask]) ** 2)
-        den = np.sum(self.D[mask] ** 2)
-
+        num = float(np.sum((self.D[mask] - self.D_hat[mask]) ** 2))
+        den = float(np.sum(self.D[mask] ** 2))
         stress = np.sqrt(num / den)
         return stress

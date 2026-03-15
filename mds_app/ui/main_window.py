@@ -10,7 +10,7 @@ from mds_app.ui.visualization_area import VisualizationArea
 
 
 class MainWindow:
-    def __init__(self, root):
+    def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Analisador MDS Educacional")
         self.root.geometry("900x600")
@@ -18,7 +18,7 @@ class MainWindow:
         self._create_layout()
 
     # create all main window layout:
-    def _create_layout(self):
+    def _create_layout(self) -> None:
         # ----------------------------------------------------------------------
         # creating widgets:
         # ----------------------------------------------------------------------

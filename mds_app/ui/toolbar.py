@@ -3,13 +3,18 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
+from typing import Union, TYPE_CHECKING
+
 from mds_app.ui.import_dialog import ImportDialog
 from mds_app.utils.csv_loader import *
 from mds_app.utils.validators import *
 
+# if TYPE_CHECKING:
+from mds_app.ui.control_panel import ControlPanel
+from mds_app.ui.visualization_area import VisualizationArea
 
 class ToolBar(ttk.Frame):
-    def __init__(self, parent, dataset, control_panel, visualization_area):
+    def __init__(self, parent, dataset: Dataset, control_panel: ControlPanel, visualization_area: VisualizationArea) -> None:
         super().__init__(parent)
         self.parent = parent
         self.dataset = dataset
@@ -91,7 +96,7 @@ class ToolBar(ttk.Frame):
                 messagebox.showerror("Erro", "Nenhuma informação válida encontrada.")
                 return
 
-            # def on_confirm(new_headers):
+            # def on_confirm(new_headers: list[str]) -> None:
             #     self.dataset.set_selected_headers(new_headers)
             #
             #     # show first participant
@@ -108,6 +113,9 @@ class ToolBar(ttk.Frame):
             self.visualization_area.create_dataframe(self.dataset, index=0)
             self.visualization_area.create_mds(self.dataset, self.control_panel.tags, index=0)
             self.control_panel.view = "data"
+
+            # export_excel("Respostas - Formulário", self.dataset)
+            # export_csv("Respostas - Formulário", self.dataset)
 
             self.control_panel.refresh()
 

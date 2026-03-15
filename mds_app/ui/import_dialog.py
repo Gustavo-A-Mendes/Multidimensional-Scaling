@@ -2,8 +2,10 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import simpledialog, messagebox
 
+from typing import Union, Callable
+
 class ImportDialog(tk.Toplevel):
-    def __init__(self, parent, headers, on_confirm):
+    def __init__(self, parent, headers: list[str], on_confirm: Callable[[list[str]], None]) -> None:
         super().__init__(parent)
         self.parent = parent
         self.title("Revisão de Cabeçalhos")
@@ -24,7 +26,7 @@ class ImportDialog(tk.Toplevel):
 
     # create a listbox and its own frame:
     @staticmethod
-    def _create_listbox(parent):
+    def _create_listbox(parent) -> tuple[tk.Frame, tk.Listbox]:
         frame = ttk.Frame(parent)
 
         lb = tk.Listbox(frame, selectmode="extended")
@@ -37,7 +39,7 @@ class ImportDialog(tk.Toplevel):
         return frame, lb
 
     # create a dual list import dialog:
-    def _create_widgets(self):
+    def _create_widgets(self) -> None:
         # ----------------------------------------------------------------------
         # creating widgets:
         # ----------------------------------------------------------------------
@@ -91,7 +93,7 @@ class ImportDialog(tk.Toplevel):
             self.lb_available.insert("end", h)
 
     # setting between dual list:
-    def _move_selected(self):
+    def _move_selected(self) -> None:
         items = [self.lb_available.get(i) for i in self.lb_available.curselection()]
         for item in items:
             # self._insert_unique(self.lb_selected, item)
@@ -100,7 +102,8 @@ class ImportDialog(tk.Toplevel):
             self.lb_available.delete(i)
         self.btn_move_selected.config(state="disabled")
 
-    def _move_all(self):
+    #
+    def _move_all(self) -> None:
         items = self.lb_available.get(0, "end")
         for item in items:
             # self._insert_unique(self.lb_selected, item)
@@ -108,7 +111,8 @@ class ImportDialog(tk.Toplevel):
         self.lb_available.delete(0, "end")
         self.btn_move_selected.config(state="disabled")
 
-    def _return_selected(self):
+    #
+    def _return_selected(self) -> None:
         items = [self.lb_selected.get(i) for i in self.lb_selected.curselection()]
         for item in items:
             # self._insert_unique(self.lb_available, item)
@@ -117,7 +121,8 @@ class ImportDialog(tk.Toplevel):
             self.lb_selected.delete(i)
         self.btn_return_selected.config(state="disabled")
 
-    def _return_all(self):
+    #
+    def _return_all(self) -> None:
         items = self.lb_selected.get(0, "end")
         for item in items:
             # self._insert_unique(self.lb_available, item)
@@ -125,19 +130,22 @@ class ImportDialog(tk.Toplevel):
         self.lb_selected.delete(0, "end")
         self.btn_return_selected.config(state="disabled")
 
-    def _on_available_select(self, event):
+    #
+    def _on_available_select(self, event: tk.Event) -> None:
         if self.lb_available.curselection():
             self.btn_move_selected.config(state="normal")
         else:
             self.btn_move_selected.config(state="disabled")
 
-    def _on_selected_select(self, event):
+    #
+    def _on_selected_select(self, event: tk.Event) -> None:
         if self.lb_selected.curselection():
             self.btn_return_selected.config(state="normal")
         else:
             self.btn_return_selected.config(state="disabled")
 
-    def _validate(self):
+    #
+    def _validate(self) -> bool:
         if self.lb_selected.size() == 0:
             messagebox.showerror(
                 "Erro",
@@ -146,7 +154,8 @@ class ImportDialog(tk.Toplevel):
             return False
         return True
 
-    def _confirm(self):
+    #
+    def _confirm(self) -> None:
         if not self._validate():
             return
 
@@ -158,12 +167,15 @@ class ImportDialog(tk.Toplevel):
         self.grab_release()
         self.destroy()
 
-    def _on_close(self):
+    #
+    def _on_close(self) -> None:
         self.grab_release()
         self.destroy()
 
     # not applied methods
-    def _move_up(self):
+
+    #
+    def _move_up(self) -> None:
         selection = self.lb_selected.curselection()
         if not selection:
             return
@@ -177,7 +189,8 @@ class ImportDialog(tk.Toplevel):
         self.lb_selected.insert(i - 1, item)
         self.lb_selected.selection_set(i - 1)
 
-    def _move_down(self):
+    #
+    def _move_down(self) -> None:
         selection = self.lb_selected.curselection()
         if not selection:
             return
@@ -191,7 +204,8 @@ class ImportDialog(tk.Toplevel):
         self.lb_selected.insert(i + 1, item)
         self.lb_selected.selection_set(i + 1)
 
-    def _edit_item(self):
+    #
+    def _edit_item(self) -> None:
         lb = self._get_active_listbox()
         if not lb:
             return
@@ -216,7 +230,8 @@ class ImportDialog(tk.Toplevel):
             lb.insert(i, new_value.strip())
             lb.selection_set(i)
 
-    def _add_item(self):
+    #
+    def _add_item(self) -> None:
         from tkinter import simpledialog
 
         value = simpledialog.askstring(
@@ -230,7 +245,8 @@ class ImportDialog(tk.Toplevel):
             if value not in self.lb_available.get(0, "end"):
                 self.lb_available.insert("end", value)
 
-    def _remove_item(self):
+    #
+    def _remove_item(self) -> None:
         lb = self._get_active_listbox()
         if not lb:
             return
@@ -238,14 +254,15 @@ class ImportDialog(tk.Toplevel):
         for i in reversed(lb.curselection()):
             lb.delete(i)
 
+    #
     @staticmethod
-    def _insert_unique(listbox, item):
+    def _insert_unique(listbox: tk.Listbox, item: str) -> bool:
         if item not in listbox.get(0, "end"):
             listbox.insert("end", item)
             return True
         return False
 
-    def _get_active_listbox(self):
+    def _get_active_listbox(self) -> tk.Listbox | None:
         if self.lb_available.curselection():
             return self.lb_available
         if self.lb_selected.curselection():
