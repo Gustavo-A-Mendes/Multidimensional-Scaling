@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import unicodedata
+
 
 #
 def is_valid_value(value) -> bool:
@@ -92,3 +94,8 @@ def triangular_to_symmetric(df):
 
     # replacing
     return new_df
+
+def unicode_text(text):
+    normalized_text = unicodedata.normalize('NFD', text)
+    new_text = "".join(c for c in normalized_text if unicodedata.category(c) != 'Mn')
+    return new_text

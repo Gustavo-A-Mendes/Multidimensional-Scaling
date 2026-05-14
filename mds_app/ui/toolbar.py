@@ -5,9 +5,11 @@ from tkinter import ttk, filedialog, messagebox
 
 from typing import Union, TYPE_CHECKING
 
+from mds_app.ui.group_mapping_window import GroupMappingWindow
 from mds_app.ui.import_dialog import ImportDialog
 from mds_app.utils.csv_loader import *
 from mds_app.utils.validators import *
+from mds_app.ui.export_window import ExportWindow
 
 # if TYPE_CHECKING:
 from mds_app.ui.control_panel import ControlPanel
@@ -36,6 +38,12 @@ class ToolBar(ttk.Frame):
             text="Importar Dados",
             command=self.import_csv
         )
+        self.btn_export = ttk.Button(
+            self,
+            text="Exportar Resultados",
+            command=self.abrir_exportacao,
+            state="disabled"
+        )
         # self.btn_manual = ttk.Button(
         #     self,
         #     text="Inserir Manualmente"
@@ -55,6 +63,7 @@ class ToolBar(ttk.Frame):
         # setting layout:
         # ----------------------------------------------------------------------
         self.btn_import.pack(side="left", padx=5)
+        self.btn_export.pack(side="left", padx=5)
         # self.btn_manual.pack(side="left", padx=5)
         # self.btn_manage.pack(side="left", padx=5)
         # self.btn_mds.pack(side="left", padx=5)
@@ -65,8 +74,7 @@ class ToolBar(ttk.Frame):
         file_path = Path(filedialog.askopenfilename(
             filetypes=[
                 ("Todos os arquivos", "*.*"),
-                ("Arquivos CSV", "*.csv"),
-                ("Arquivos Excel", "*.xlsx *.xls")
+                ("Arquivos CSV", "*.csv")
             ]
         ))
         # import canceled
@@ -77,8 +85,6 @@ class ToolBar(ttk.Frame):
             ext = file_path.suffix.lower()
             if ext == ".csv":
                 df = load_csv(file_path)
-            elif ext == ".xlsx" or ext == ".xls":
-                df = load_excel(file_path)
             else:
                 messagebox.showerror("Erro", "Tipo de arquivo não suportado")
                 return
@@ -88,9 +94,39 @@ class ToolBar(ttk.Frame):
 
             participants_data, headers = separate_df(df, file_type, ext)
 
-            self.dataset.set_participants(participants_data)
+            unk_group = any(p.group == ' - ' for p in participants_data)
+            print(any(p.group == ' - ' for p in participants_data))
 
+            if unk_group:
+                def on_confirm(new_group: str):
+                    for p in participants_data:
+                        if p.group == ' - ':
+                            p.group = new_group
+
+                dialog = GroupMappingWindow(self, on_confirm)
+                self.wait_window(dialog)
+
+
+            # print(any(p.group == ' - ' for p in participants_data))
+
+            self.dataset.set_new_participants(participants_data)
             self.dataset.set_headers(headers)
+
+            # Se não tem alunos, talvez nem faça sentido continuar o plot
+            if not self.dataset.has_students:
+                messagebox.showerror("Erro Crítico", "Não há dados de alunos para visualizar.")
+                return
+
+            # Alerta caso algum grupo esteja vazio
+            if not self.dataset.has_professors:
+                missing = []
+                if not self.dataset.has_professors: missing.append("Professores (Gabarito)")
+
+                msg = f"Aviso: O arquivo não contém dados de:\n\n{', '.join(missing)}.\n\n"
+                msg += "Algumas funcionalidades de comparação e exportação estarão desabilitadas."
+                messagebox.showwarning("Importação Parcial", msg)
+
+            # ---------------------------------
 
             if not headers:
                 messagebox.showerror("Erro", "Nenhuma informação válida encontrada.")
@@ -110,14 +146,21 @@ class ToolBar(ttk.Frame):
 
             self.dataset.calc_mean()
 
-            self.visualization_area.create_dataframe(self.dataset, index=0)
-            self.visualization_area.create_mds(self.dataset, self.control_panel.tags, index=0)
-            self.control_panel.view = "data"
-
-            # export_excel("Respostas - Formulário", self.dataset)
-            # export_csv("Respostas - Formulário", self.dataset)
+            self.visualization_area.create_dataframe()
+            self.visualization_area.create_mds()
 
             self.control_panel.refresh()
 
+            self.visualization_area.refresh()
+
+            self.btn_export.state(["!disabled"])
+
+
         except Exception as e:
             messagebox.showerror("Erro ao importar CSV", str(e))
+
+    # Na sua classe principal App:
+    def abrir_exportacao(self):
+        # Passa o self.dataset ou objeto que contém os dados processados
+        export_dialog = ExportWindow(self, self.dataset)
+        self.wait_window(export_dialog)

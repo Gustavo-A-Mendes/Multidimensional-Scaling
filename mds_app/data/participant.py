@@ -22,5 +22,6 @@ class Participant:
         # print(self.mds_result.D)
         # print(self.mds_result.D_hat)
         # print(self.mds_result.X)
+        # print(self.mds_result.X_aligned)
         # print(self.mds_result.labels)
         # print(self.mds_result.stress)

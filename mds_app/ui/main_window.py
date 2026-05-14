@@ -34,7 +34,7 @@ class MainWindow:
         self.dataset = Dataset()
 
         # visualization_area:
-        self.visualization_area = VisualizationArea(self.main_paned)
+        self.visualization_area = VisualizationArea(self.main_paned, self.dataset)
 
         # control panel:
         self.control_panel = ControlPanel(
