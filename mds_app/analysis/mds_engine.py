@@ -111,7 +111,7 @@ class MDSEngine:
         elif calc_method == 'iterative':
             self.__iterative_compute()
         else:
-            raise ValueError("Método deve ser 'algebraic' ou 'interative'")
+            raise ValueError("Método deve ser 'algebraic' ou 'iterative'")
 
         # self.D, self.gram_, self.mds_data, self.stress = self.compute(X)
 
@@ -168,7 +168,7 @@ class MDSEngine:
             Implementação do MDS Iterativo (Ex: SMACOF).
             Este método é ideal quando há NaNs, pois pode ignorá-los no cálculo do Stress.
         """
-        pass
+        raise NotImplementedError("MDS Iterativo ainda não implementado.")
 
     # Prepare the dissimilarity matrix based on input type:
     def __prepare_dissimilarity(self, data : Union[np.ndarray, pd.DataFrame]) -> None:
@@ -276,7 +276,7 @@ class MDSEngine:
         # Verifica validade dos dados:
         if len(eigvals) < self.n_components:
             raise ValueError(
-                "Number of positive eigenvalues is smaller thann n_components."
+                "Number of positive eigenvalues is smaller than n_components."
             )
 
         self.eigenvalues = eigvals

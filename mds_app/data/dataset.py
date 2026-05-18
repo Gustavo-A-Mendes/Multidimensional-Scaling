@@ -16,7 +16,6 @@ class Dataset:
         #
         #
         # {
-        #     "count": int,
         #     "professors": list[Participant],
         #     "professors_mean": {            -> Ideia de implementação
         #         "centroids": Matrix,
@@ -28,7 +27,7 @@ class Dataset:
         #         "stds": Matrix
         #     }
         # }
-        self.participants: dict[str, int|list[Participant]|None] | None = None
+        self.participants: dict[str, list[Participant]] | None = None
 
         self.has_professors = False
         self.has_students = False
@@ -50,7 +49,6 @@ class Dataset:
         self.stds: dict[str, Matrix|None] | None = None
         self.alinhados: dict[str, Matrix|None] | None = None
 
-    #
     def set_new_participants(self, participants: list[Participant]) -> None:
         # clear dataset:
         self.participants = None
@@ -65,7 +63,6 @@ class Dataset:
         }
 
         participants_dict = {
-            "count": 0,
             "professors": [],
             "students": []
         }
@@ -75,32 +72,28 @@ class Dataset:
                 p.pid = count["professors"]
                 count["professors"] += 1
                 participants_dict["professors"].append(p)
-                participants_dict["count"] += 1
             elif p.group.upper() == "ALUNO":
                 self.has_students = True
                 p.pid = count["students"]
                 count["students"] += 1
                 participants_dict["students"].append(p)
-                participants_dict["count"] += 1
 
         self.participants = participants_dict
 
     #
     def add_participant(self, participant: Participant) -> None:
-        participants_dict = {
-            "count": 0 if self.participants["count"] is None else self.participants["count"],
-            "professors": [] if self.participants["count"] is None else self.participants["professors"],
-            "students": [] if self.participants["count"] is None else self.participants["students"]
-        }
+        if self.participants is None:
+            self.participants = {
+                "professors": [],
+                "students": []
+            }
 
         if participant.group.upper() == "PROFESSOR":
-            participants_dict["professors"].append(participant)
-            participants_dict["count"] += 1
+            self.participants["professors"].append(participant)
+            self.has_professors = True
         elif participant.group.upper() == "ALUNO":
-            participants_dict["students"].append(participant)
-            participants_dict["count"] += 1
-
-        self.participants = participants_dict
+            self.participants["students"].append(participant)
+            self.has_students = True
 
     #
     def set_headers(self, headers: list[str]) -> None:
@@ -114,18 +107,17 @@ class Dataset:
     def headers_match(self, header: str) -> bool:
         return header in self.headers
 
-    #
     def add_header(self, header: str) -> bool:
         if self.headers_match(header):
             return False
 
         self.headers.append(header)
 
-        for p in self.participants["professors"]:
-            p.dataframe[header] = "-"
-
-        for p in self.participants["students"]:
-            p.dataframe[header] = "-"
+        for p in self.participants["professors"] + self.participants["students"]:
+            if p.dataframe_pre is not None:
+                p.dataframe_pre[header] = "-"
+            if p.dataframe_pos is not None:
+                p.dataframe_pos[header] = "-"
 
         return True
 
@@ -134,12 +126,10 @@ class Dataset:
         if not self.headers_match(header):
             return False
 
-        for p in self.participants["professors"]:
-            if not p.dataframe[header].eq("-").all():
+        for p in self.participants["professors"] + self.participants["students"]:
+            if p.dataframe_pre is not None and not p.dataframe_pre[header].eq("-").all():
                 return False
-
-        for p in self.participants["students"]:
-            if not p.dataframe[header].eq("-").all():
+            if p.dataframe_pos is not None and not p.dataframe_pos[header].eq("-").all():
                 return False
 
         return True
@@ -151,13 +141,11 @@ class Dataset:
 
         self.headers.remove(header)
 
-        for p in self.participants["professors"]:
-            if header in p.dataframe.columns:
-                p.dataframe.drop(columns=[header], inplace=True)
-
-        for p in self.participants["students"]:
-            if header in p.dataframe.columns:
-                p.dataframe.drop(columns=[header], inplace=True)
+        for p in self.participants["professors"] + self.participants["students"]:
+            if p.dataframe_pre is not None and header in p.dataframe_pre.columns:
+                p.dataframe_pre.drop(columns=[header], inplace=True)
+            if p.dataframe_pos is not None and header in p.dataframe_pos.columns:
+                p.dataframe_pos.drop(columns=[header], inplace=True)
 
         return True
 
@@ -183,99 +171,102 @@ class Dataset:
 
         return target_aligned
 
-    #
     def calc_mean(self) -> None:
-        p_participants = self.participants["professors"]
-        s_participants = self.participants["students"]
-        # print(p_participants)
-        # print(s_participants)
+        mean: dict[str, Matrix|None]            = {}
+        centroids: dict[str, Matrix|None]       = {}
+        stds: dict[str, Matrix|None]            = {}
+        alinhados: dict[str, list[Matrix]|None] = {}
 
-        p_coord_array = [p.mds_result.X for p in p_participants]
-        p_matrix = [p.mds_result.D for p in p_participants]
-        s_coord_array = [s.mds_result.X for s in s_participants]
-        s_matrix = [s.mds_result.D for s in s_participants]
+        # 1. Unificar Professores (Priorizar Pós, usar Pré como fallback)
+        unified_p_matrices = []
+        unified_p_coords = []
+        unified_p_participants = []
 
-        mean: dict[str, Matrix|None]            = {"professors": None, "students": None}
-        centroids: dict[str, Matrix|None]       = {"professors": None, "students": None}
-        stds: dict[str, Matrix|None]            = {"professors": None, "students": None}
-        alinhados: dict[str, list[Matrix]|None] = {"professors": None, "students": None}
+        for p in self.participants["professors"]:
+            if p.dataframe_pos is not None:
+                unified_p_matrices.append(p.mds_result_pos.D)
+                unified_p_coords.append(p.mds_result_pos.X)
+                unified_p_participants.append(p)
+            elif p.dataframe_pre is not None:
+                unified_p_matrices.append(p.mds_result_pre.D)
+                unified_p_coords.append(p.mds_result_pre.X)
+                unified_p_participants.append(p)
 
-        # ==================================================
-        # 1. Professors
+        mean["professors"] = None
+        centroids["professors"] = None
+        stds["professors"] = None
+        alinhados["professors"] = None
 
-        # aligning all professors by using Procrustes based on the first professor:
-        p_alinhados = []
-        if p_coord_array:
-            p_referencia = p_coord_array[0]
+        if unified_p_coords:
+            p_referencia = unified_p_coords[0]
             p_alinhados = [p_referencia]
-
-            if len(p_coord_array) > 1:
-                for i in range(1, len(p_coord_array)):
-                    m2 = self.rigid_procrustes(p_referencia, p_coord_array[i])
+            if len(unified_p_coords) > 1:
+                for i in range(1, len(unified_p_coords)):
+                    m2 = self.rigid_procrustes(p_referencia, unified_p_coords[i])
                     p_alinhados.append(m2)
 
-            # 2. Calc centroids and dispersion of the columns of 'p_alinhados':
-            p_mean = np.nanmean(p_matrix, axis=0)
+            p_mean = np.nanmean(unified_p_matrices, axis=0)
             mean["professors"] = np.round(p_mean, 1)
-
             centroids["professors"] = np.mean(p_alinhados, axis=0)
             stds["professors"] = np.std(p_alinhados, axis=0)
+            alinhados["professors"] = p_alinhados
 
-        # 2. Students
-        s_alinhados = []
-        if p_coord_array:
+            # Salvar X_aligned em ambas as instâncias mds_result do professor (se existirem)
+            for i, p in enumerate(unified_p_participants):
+                if p.dataframe_pre is not None:
+                    p.mds_result_pre.X_aligned = p_alinhados[i]
+                if p.dataframe_pos is not None:
+                    p.mds_result_pos.X_aligned = p_alinhados[i]
+
+        # 2. Estudantes
+        for phase in ["pre", "pos"]:
+            s_participants = [p for p in self.participants["students"] if getattr(p, f"dataframe_{phase}") is not None]
+
+            s_coord_array = [getattr(s, f"mds_result_{phase}").X for s in s_participants]
+            s_matrix = [getattr(s, f"mds_result_{phase}").D for s in s_participants]
+
+            mean[f"students_{phase}"] = None
+            centroids[f"students_{phase}"] = None
+            stds[f"students_{phase}"] = None
+            alinhados[f"students_{phase}"] = None
+
+            s_alinhados = []
             s_referencia = centroids["professors"]
 
-            if p_coord_array:
-                for i in range(len(s_coord_array)):
-                    m2 = self.rigid_procrustes(s_referencia, s_coord_array[i])
-                    s_alinhados.append(m2)
+            if s_referencia is not None:
+                if s_coord_array:
+                    for i in range(len(s_coord_array)):
+                        m2 = self.rigid_procrustes(s_referencia, s_coord_array[i])
+                        s_alinhados.append(m2)
+            elif s_coord_array:
+                if phase == "pos" and centroids.get("students_pre") is not None:
+                    s_referencia = centroids["students_pre"]
+                    for i in range(len(s_coord_array)):
+                        m2 = self.rigid_procrustes(s_referencia, s_coord_array[i])
+                        s_alinhados.append(m2)
+                else:
+                    s_referencia = s_coord_array[0]
+                    s_alinhados = [s_referencia]
+                    if len(s_coord_array) > 1:
+                        for i in range(1, len(s_coord_array)):
+                            m2 = self.rigid_procrustes(s_referencia, s_coord_array[i])
+                            s_alinhados.append(m2)
 
-        elif s_coord_array:
-            s_referencia = s_coord_array[0]
-            s_alinhados = [s_referencia]
+            if s_alinhados:
+                s_mean = np.nanmean(s_matrix, axis=0)
+                mean[f"students_{phase}"] = np.round(s_mean, 1)
+                centroids[f"students_{phase}"] = np.mean(s_alinhados, axis=0)
+                stds[f"students_{phase}"] = np.std(s_alinhados, axis=0)
+                
+            alinhados[f"students_{phase}"] = s_alinhados
 
-            # aligning all students by using Procrustes based on the professors mean:
-            if len(s_coord_array) > 1:
-                for i in range(1, len(s_coord_array)):
-                    m2 = self.rigid_procrustes(s_referencia, s_coord_array[i])
-                    s_alinhados.append(m2)
+            for i, s in enumerate(s_participants):
+                getattr(s, f"mds_result_{phase}").X_aligned = alinhados[f"students_{phase}"][i]
 
-        if s_alinhados:
-            s_mean = np.nanmean(s_matrix, axis=0)
-            mean["students"] = np.round(s_mean, 1)
-
-            centroids["students"] = np.mean(s_alinhados, axis=0)
-            # manual std, because it'll use professors mean for the calc:
-            stds["students"] = np.std(s_alinhados, axis=0)
-            # stds["students"] = np.sqrt(np.mean((s_alinhados - centroids["professors"])**2, axis=0))
-
-            # deslocar alinhados para o 1º quadrante:
-            # total_alinhados = np.array([p_alinhados + s_alinhados])
-            # shift_coord = self.get_shift_matrix(total_alinhados)
-            # alinhados["students"] = [(s + shift_coord) for s in s_alinhados]
-            alinhados["students"] = [s for s in s_alinhados]
-            # colocar todos no quadrante 1:
-            # alinhados["professors"] = [(p + shift_coord) for p in p_alinhados]
-            alinhados["professors"] = [p for p in p_alinhados]
-
-            self.mean = mean
-            self.centroids = centroids
-            self.alinhados = alinhados.copy()
-            self.stds = stds.copy()
-
-        # print(len(self.alinhados["professors"]))
-        # print(len(self.alinhados["students"]))
-        for i in range(len(p_participants)):
-            p_participants[i].mds_result.X_aligned = self.alinhados["professors"][i]
-        # print("Oi")
-
-        for i in range(len(s_participants)):
-            s_participants[i].mds_result.X_aligned = self.alinhados["students"][i]
-
-
-        # print(self.alinhados)
-        # print(self.centroids)
+        self.mean = mean
+        self.centroids = centroids
+        self.alinhados = alinhados
+        self.stds = stds
 
     #
     @staticmethod
@@ -296,7 +287,17 @@ class Dataset:
         participants = self.participants["professors"] + self.participants["students"]
 
         # Concatena todas as matrizes X_aligned em uma única nuvem de pontos
-        all_coords = np.vstack([p.mds_result.X_aligned for p in participants])
+        all_coords = []
+        for p in participants:
+            if p.mds_result_pre and p.mds_result_pre.X_aligned is not None:
+                all_coords.append(p.mds_result_pre.X_aligned)
+            if p.mds_result_pos and p.mds_result_pos.X_aligned is not None:
+                all_coords.append(p.mds_result_pos.X_aligned)
+        
+        if not all_coords:
+            return (-1.0, 1.0)
+            
+        all_coords = np.vstack(all_coords)
 
         # Encontra o valor absoluto máximo para criar um gráfico centralizado e simétrico
         # Adicionamos uma margem de 10% (buffer) para os pontos não ficarem colados na borda

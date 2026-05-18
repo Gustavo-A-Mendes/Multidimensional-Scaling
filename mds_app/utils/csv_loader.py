@@ -15,7 +15,6 @@ from mds_app.utils.validators import *
 # load a *.cls file and return dataframe:
 def load_csv(filepath: Path) -> pd.DataFrame:
     df = pd.read_csv(filepath)
-    # print(df)
     return df
 
 def export_csv(filename: str, dataset: Dataset) -> None:
@@ -104,7 +103,6 @@ def get_header(df: pd.DataFrame) -> list[str]:
             keywords.append(a)
         if b not in keywords:
             keywords.append(b)
-    # print(keywords)
     return keywords
 
 # converts forms sheet into a list of dict, containing participant data:
@@ -114,6 +112,7 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
     names_temp = []
     groups_temp = []
     levels_temp = []
+    phases_temp = []
     keywords = []
     data_columns = []
 
@@ -139,6 +138,9 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
                 if "nível" in col.lower():
                     levels_temp = df[col].tolist()
 
+                if "fase" in col.lower() or "momento" in col.lower() or "etapa" in col.lower() or "periodo" in col.lower() or "período" in col.lower():
+                    phases_temp = df[col].tolist()
+
                 # proceeding...
 
                 # filtering the keyword of columns headers (and listing the data_columns):
@@ -159,6 +161,10 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
 
                 data_columns.append(col)
 
+            p_num_participants = 0
+            s_num_participants = 0
+            participants_dict = {}
+
             # generate matrices and building participants infos:
             for idx in range(len(df)):
 
@@ -177,41 +183,53 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
                     return None
 
                 # building participant info:
-                num_participants = len(participants_data)
-                p_num_participants = 0
-                s_num_participants = 0
+                num_participants = len(participants_dict)
 
-                if not pd.isna(groups_temp[idx]):
+                if groups_temp and not pd.isna(groups_temp[idx]):
                     if groups_temp[idx].upper() == "PROFESSOR":
-                        name = f"Professor {p_num_participants}" if pd.isna(names_temp[idx]) else names_temp[idx]
+                        if not names_temp or pd.isna(names_temp[idx]):
+                            name = f"Professor {p_num_participants}"
+                            p_num_participants += 1
+                        else:
+                            name = names_temp[idx]
                         group = f"Professor"
-                        level = f" - " if pd.isna(levels_temp[idx]) else levels_temp[idx]
-                        p_num_participants += 1
+                        level = f" - " if not levels_temp or pd.isna(levels_temp[idx]) else levels_temp[idx]
 
                     elif groups_temp[idx].upper() == "ALUNO":
-                        name = f"Aluno {s_num_participants}" if pd.isna(names_temp[idx]) else names_temp[idx]
+                        if not names_temp or pd.isna(names_temp[idx]):
+                            name = f"Aluno {s_num_participants}"
+                            s_num_participants += 1
+                        else:
+                            name = names_temp[idx]
                         group = f"Aluno"
-                        level = f" - " if pd.isna(levels_temp[idx]) else levels_temp[idx]
-                        s_num_participants += 1
+                        level = f" - " if not levels_temp or pd.isna(levels_temp[idx]) else levels_temp[idx]
 
                     else:
-                        name = f"Participante {num_participants}" if pd.isna(names_temp[idx]) else names_temp[idx]
+                        name = f"Participante {num_participants}" if not names_temp or pd.isna(names_temp[idx]) else names_temp[idx]
                         group = f" - " if pd.isna(groups_temp[idx]) else groups_temp[idx]
-                        level = f" - " if pd.isna(levels_temp[idx]) else levels_temp[idx]
+                        level = f" - " if not levels_temp or pd.isna(levels_temp[idx]) else levels_temp[idx]
 
                 else:
-                    name = f"Participante {num_participants}" if pd.isna(names_temp[idx]) else names_temp[idx]
-                    group = f" - " if pd.isna(groups_temp[idx]) else groups_temp[idx]
-                    level = f" - " if pd.isna(levels_temp[idx]) else levels_temp[idx]
+                    name = f"Participante {num_participants}" if not names_temp or pd.isna(names_temp[idx]) else names_temp[idx]
+                    group = f" - " if not groups_temp or pd.isna(groups_temp[idx]) else groups_temp[idx]
+                    level = f" - " if not levels_temp or pd.isna(levels_temp[idx]) else levels_temp[idx]
 
-                participant_data = Participant(
-                    pid=num_participants,
-                    name=name,
-                    group=group,
-                    familiarity_level=level,
-                    dataframe=mat
-                )
-                participants_data.append(participant_data)
+                phase = "pre" if not phases_temp or pd.isna(phases_temp[idx]) else phases_temp[idx]
+
+                if name in participants_dict:
+                    participant_data = participants_dict[name]
+                else:
+                    participant_data = Participant(
+                        pid=num_participants,
+                        name=name,
+                        group=group,
+                        familiarity_level=level
+                    )
+                    participants_dict[name] = participant_data
+                
+                participant_data.add_dataframe(mat, str(phase))
+
+            participants_data = list(participants_dict.values())
 
     headers = keywords
     return participants_data, headers

@@ -19,6 +19,15 @@ class ExportWindow(tk.Toplevel):
         self.grab_set()  # bloqueia interação com outras janelas
         self.focus_set()  # foco imediato
 
+        # Variáveis de Fases
+        self.var_phase_pre = tk.BooleanVar(value=True)
+        
+        # Verifica se existe pos-teste
+        has_pos = any(p.dataframe_pos is not None for p in self.app_data.participants["students"])
+        self.var_phase_pos = tk.BooleanVar(value=False)
+        self.var_evolucao = tk.BooleanVar(value=False)
+        self.has_pos = has_pos
+
         # Variáveis de Controle
         self.var_matrizes = tk.BooleanVar(value=True)
         self.var_coords = tk.BooleanVar(value=True)
@@ -37,6 +46,16 @@ class ExportWindow(tk.Toplevel):
     def _setup_ui(self):
         container = ttk.Frame(self, padding=10)
         container.pack(fill="both", expand=True)
+
+        # Fases a Exportar
+        lf_phases = ttk.LabelFrame(container, text="Fases da Análise", padding=5)
+        lf_phases.pack(fill="x", pady=5)
+        self.phase_pre_chk = ttk.Checkbutton(lf_phases, text="Pré-teste", variable=self.var_phase_pre)
+        self.phase_pre_chk.pack(side="left", padx=10)
+        self.phase_pos_chk = ttk.Checkbutton(lf_phases, text="Pós-teste", variable=self.var_phase_pos, state="normal" if self.has_pos else "disabled", command=self._activation_opt)
+        self.phase_pos_chk.pack(side="left", padx=10)
+        self.evo_chk = ttk.Checkbutton(lf_phases, text="Incluir Evolução nos Gráficos (Requer Pós-teste)", variable=self.var_evolucao, state="disabled")
+        self.evo_chk.pack(side="left", padx=10)
 
         # 1 e 2. Matrizes e Coordenadas
         lf_data = ttk.LabelFrame(container, text="Dados Numéricos", padding=5)
@@ -110,6 +129,12 @@ class ExportWindow(tk.Toplevel):
         else:
             for opt in self.options_checkbox:
                 opt.state(["disabled"])
+                
+        if self.var_phase_pos.get():
+            self.evo_chk.state(["!disabled"])
+        else:
+            self.evo_chk.state(["disabled"])
+            self.var_evolucao.set(False)
 
     def processar_exportacao(self):
         self._set_ui_state(False)
@@ -177,6 +202,9 @@ class ExportWindow(tk.Toplevel):
                 self.mean_plot_chk.state(["disabled"])
                 for opt in self.options_checkbox:
                     opt.state(["disabled"])
+                self.phase_pre_chk.state(["disabled"])
+                self.phase_pos_chk.state(["disabled"])
+                self.evo_chk.state(["disabled"])
 
                 self.export_btn.state(["disabled"])
 

@@ -17,40 +17,25 @@ class ControlPanel(ttk.Frame):
         self.visualization_area = visualization_area
 
         self.selected_participant: Participant | None = None
-        self.view: str | None = None
+        self.view_mode = tk.StringVar(value="default")
 
+        self.radiobuttons: list[ttk.Radiobutton] = []
         self.combobox: ttk.Combobox | None  = None
+        self.radio_var: tk.StringVar | None = None
         self.name_var: tk.StringVar | None  = None
         self.group_var: tk.StringVar | None = None
         self.level_var: tk.StringVar | None = None
+        
+        self.phase_var: tk.StringVar | None = None
+        self.phase_radiobuttons: list[ttk.Radiobutton] = []
 
-        # plot attributes:
-        self.highlight_checkbox: ttk.Checkbutton | None = None
-        self.highlight_values = tk.BooleanVar(value=False)
-
-        self.destaque_view_checkbox: ttk.Checkbutton | None = None
-        self.destaque_view_values = tk.BooleanVar(value=True)
-
-        self.mean_view_checkbox: ttk.Checkbutton | None = None
-        self.mean_view_values = tk.BooleanVar(value=False)
-
-        self.dispersion_view_checkbox: ttk.Checkbutton | None   = None
-        self.dispersion_view_values = tk.BooleanVar(value=False)
-
-        self.tags: list[tk.BooleanVar] = [
-            self.highlight_values,
-            self.destaque_view_values,
-            self.mean_view_values,
-            self.dispersion_view_values
-        ]
-
-        self.configure(width=250)
+        # self.configure(width=250)
 
         self._create_widgets()
 
     # create the control panel area:
     def _create_widgets(self) -> None:
-        self.scroll: ScrollableFrame = ScrollableFrame(self)
+        self.scroll = ScrollableFrame(self)
         self.scroll.pack(fill="both", expand=True)
 
         content_frame = self.scroll.content
@@ -67,10 +52,10 @@ class ControlPanel(ttk.Frame):
         # participant info:
         self.data_info_frame = ttk.Frame(content_frame)
         self.text_var = tk.StringVar(value="")
-        self.info_label = ttk.Label(self.data_info_frame, textvariable=self.text_var)
+        self.info_label = ttk.Label(self.data_info_frame, textvariable=self.text_var, justify="center")
 
         # create attribute to contain mds frame:
-        self.mds_info_frame = None
+        # self.mds_info_frame = None
 
         self.data_info_frame.pack(fill="x", pady=10)
         self.refresh()
@@ -79,113 +64,167 @@ class ControlPanel(ttk.Frame):
     def refresh(self) -> None:
         if not self.dataset.participants:
             self.text_var.set(value="Nenhum dado encontrado")
-        elif self.view == "data":
-            self.text_var.set(value=f"{len(self.dataset.participants)} Participante(s)")
+        else:
+            p_len = len(self.dataset.participants["professors"])
+            s_len = len(self.dataset.participants["students"])
+            self.text_var.set(value=f"{p_len + s_len} Participante(s)\n{p_len} Professores e {s_len} Alunos")
 
             # --------------------------------------------------
+            if not self.radiobuttons:
+                radio_frame = ttk.Frame(self.data_info_frame)
+                radio_frame.pack()
+
+                self.radio_var = tk.StringVar(value="default")
+                default_view_radio = ttk.Radiobutton(
+                    radio_frame,
+                    text="Padrão",
+                    value="default",
+                    variable=self.radio_var,
+                    command=self._enable_ctrl
+                )
+
+                mean_view_radio = ttk.Radiobutton(
+                    radio_frame,
+                    text="Média",
+                    value="mean",
+                    variable=self.radio_var,
+                    command=self._enable_ctrl
+                )
+                self.radiobuttons.append(default_view_radio)
+                self.radiobuttons.append(mean_view_radio)
+
+                #
+                ttk.Label(radio_frame, text="Modo de visualização:").pack(fill="x", anchor="w")
+                # for r_btn in self.radiobuttons:
+                # ttk.Label(radio_frame, text=r_btn[valu])
+                [r_btn.pack(fill="x", side="left", padx=10, pady=10) for r_btn in self.radiobuttons]
+
+            # --------------------------------------------------
+            # phase view navigation:
+            if not self.phase_radiobuttons:
+                phase_frame = ttk.Frame(self.data_info_frame)
+                phase_frame.pack()
+                
+                self.phase_var = tk.StringVar(value="pre")
+                
+                ttk.Label(phase_frame, text="Fase da análise:").pack(fill="x", anchor="w")
+                
+                pre_radio = ttk.Radiobutton(
+                    phase_frame, text="Pré-teste", value="pre", variable=self.phase_var, command=self._enable_ctrl
+                )
+                pos_radio = ttk.Radiobutton(
+                    phase_frame, text="Pós-teste", value="pos", variable=self.phase_var, command=self._enable_ctrl
+                )
+
+                
+                pre_radio.pack(fill="x", side="left", padx=10, pady=5)
+                pos_radio.pack(fill="x", side="left", padx=10, pady=5)
+                
+                self.phase_radiobuttons = [pre_radio, pos_radio]
+
+            has_pos = any(p.dataframe_pos is not None for p in self.dataset.participants["professors"] + self.dataset.participants["students"])
+            if has_pos:
+                self.phase_radiobuttons[1].configure(state="normal")
+            else:
+                self.phase_radiobuttons[1].configure(state="disabled")
+
             # combobox navigation:
             if not self.combobox:
                 self.combobox = ttk.Combobox(self.data_info_frame, state="readonly")
-                self.combobox.pack(fill="x", padx=10, pady=10)
+                self.combobox.pack(fill="x", side="top", padx=10, pady=10)
                 self.combobox.bind("<<ComboboxSelected>>", self._on_select)
 
                 # navegation:
                 nav_frame = ttk.Frame(self.data_info_frame)
                 nav_frame.pack(pady=10)
 
-                ttk.Button(nav_frame, text="◀", width=5, command=lambda: self._data_nav("anterior")).grid(row=0, column=0, padx=5)
-                ttk.Button(nav_frame, text="▶", width=5, command=lambda: self._data_nav("proximo")).grid(row=0, column=1, padx=5)
+                self.nav_buttons = []
+                nav_prev = ttk.Button(nav_frame, text="◀", width=5, command=lambda: self._data_nav("anterior"))
+                nav_next = ttk.Button(nav_frame, text="▶", width=5, command=lambda: self._data_nav("proximo"))
+
+                self.nav_buttons.append(nav_prev)
+                self.nav_buttons.append(nav_next)
+
+                nav_prev.grid(row=0, column=0, padx=5)
+                nav_next.grid(row=0, column=1, padx=5)
 
                 ttk.Separator(self.data_info_frame).pack(fill="x", pady=10)
 
                 # --------------------------------------------------
                 # participant info:
-                ttk.Label(self.data_info_frame, text="Informações da matriz:", font=("Segoe UI", 10, "bold")).pack(padx=10, pady=10)
+                self.data_label = ttk.Label(self.data_info_frame, text="Informações da matriz:", font=("Segoe UI", 10, "bold"))
+                self.data_label.pack(padx=10, pady=10)
 
-                idx = self.combobox.current()
                 self.name_var = tk.StringVar(value="Nome: - ")
                 self.group_var = tk.StringVar(value="Grupo: - ")
                 self.level_var = tk.StringVar(value="Nível: - ")
 
-                label_nome = ttk.Label(self.data_info_frame, textvariable=self.name_var)
-                label_nome.pack(padx=10, pady=10)
+                self.name_label = ttk.Label(self.data_info_frame, textvariable=self.name_var)
+                self.name_label.pack(padx=10, pady=10)
 
-                label_grupo = ttk.Label(self.data_info_frame, textvariable=self.group_var)
-                label_grupo.pack(padx=10, pady=10)
+                self.group_label = ttk.Label(self.data_info_frame, textvariable=self.group_var)
+                self.group_label.pack(padx=10, pady=10)
 
-                label_nivel = ttk.Label(self.data_info_frame, textvariable=self.level_var)
-                label_nivel.pack(padx=10, pady=10)
+                self.level_label = ttk.Label(self.data_info_frame, textvariable=self.level_var)
+                self.level_label.pack(padx=10, pady=10)
 
-                self.get_metadata(idx)
+                # --------------------------------------------------
+                # plot control:
 
-            # --------------------------------------------------
-            # plot control:
-
-            ttk.Separator(self.data_info_frame).pack(fill="x", pady=10)
-
-            # highlight:
-            if not self.highlight_checkbox:
-                self.highlight_checkbox = ttk.Checkbutton(
-                    self.data_info_frame,
-                    text="Destacar valores",
-                    command=self._hightlight_values,
-                    variable=self.highlight_values,
-                    onvalue=True,
-                    offvalue=False
-                )
-                self.highlight_checkbox.pack(fill="x", padx=10)
-
-            # destaque view:
-            if not self.destaque_view_checkbox:
-                self.destaque_view_checkbox = ttk.Checkbutton(
-                    self.data_info_frame,
-                    text="Visualizar em Destaque",
-                    command=self._destaque_view_values,
-                    variable=self.destaque_view_values,
-                    onvalue=True,
-                    offvalue=False
-                )
-                self.destaque_view_checkbox.pack(fill="x", padx=10)
-
-            # mean view:
-            if not self.mean_view_checkbox:
-                self.mean_view_checkbox = ttk.Checkbutton(
-                    self.data_info_frame,
-                    text="Visualizar Média",
-                    command=self._mean_view_values,
-                    variable=self.mean_view_values,
-                    onvalue=True,
-                    offvalue=False
-                )
-                self.mean_view_checkbox.pack(fill="x", padx=10)
-
-            # dispersion view:
-            if not self.dispersion_view_checkbox:
-                self.dispersion_view_checkbox = ttk.Checkbutton(
-                    self.data_info_frame,
-                    text="Visualizar Dispersão",
-                    command=self._dispersion_view_values,
-                    variable=self.dispersion_view_values,
-                    onvalue=True,
-                    offvalue=False
-                )
-                self.dispersion_view_checkbox.pack(fill="x", padx=10)
+                ttk.Separator(self.data_info_frame).pack(fill="x", pady=10)
 
             self.scroll.refresh()
 
-            if self.combobox:
-                names = [p.name for p in self.dataset.participants]
-                self.combobox["values"] = names
-                self.combobox.current(0)
+            if self.radiobuttons:
+                pass
 
-        elif self.view == "mds":
-            pass
+            if self.combobox:
+                p_names = [p.name for p in self.dataset.participants["professors"]]
+                s_names = [p.name for p in self.dataset.participants["students"]]
+                names = p_names + s_names
+                self.combobox["values"] = s_names
+                self.combobox.current(0)
+                self.get_metadata(0)
+                self.visualization_area.set_index(0)
 
         self.info_label.pack(padx=10, pady=10)
 
+    #
+    def _enable_ctrl(self):
+        status = self.radio_var.get()
+        phase = self.phase_var.get()
+        if status == "default":
+            self.combobox.configure(state="normal")
+            self.nav_buttons[0].configure(state="normal")
+            self.nav_buttons[1].configure(state="normal")
+            self.data_label.configure(state="normal")
+            self.name_label.configure(state="normal")
+            self.group_label.configure(state="normal")
+            self.level_label.configure(state="normal")
+        if status == "mean":
+            self.combobox.configure(state="disabled")
+            self.nav_buttons[0].configure(state="disabled")
+            self.nav_buttons[1].configure(state="disabled")
+            self.data_label.configure(state="disabled")
+            self.name_label.configure(state="disabled")
+            self.group_label.configure(state="disabled")
+            self.level_label.configure(state="disabled")
+
+        idx = self.combobox.current()
+
+        # print(idx)
+        if idx is None or idx < 0:
+            return
+
+        self.view_mode.set(value=status)
+        
+        phase = self.phase_var.get()
+
+        self.visualization_area.set_index(idx, phase, status)
+
     # update de control panel and visualization when interact with combobox or listbox:
     def _on_select(self, event: tk.Event) -> None:
-        idx: int = self.combobox.current()
+        idx = self.combobox.current()
 
         # print(idx)
         if idx is None:
@@ -195,9 +234,14 @@ class ControlPanel(ttk.Frame):
         self.get_metadata(idx)
 
         headers: list[str] = self.dataset.selected_headers
-        self.selected_participant = self.dataset.participants[idx]
-        self.visualization_area.show_matrix(self.selected_participant, headers, self.highlight_values.get())
-        self.visualization_area.show_mds(self.dataset, self.selected_participant, self.tags, idx)
+
+        p_participants = self.dataset.participants["professors"]
+        s_participants = self.dataset.participants["students"]
+        participants = p_participants + s_participants
+        self.selected_participant = s_participants[idx]
+
+        phase = self.phase_var.get()
+        self.visualization_area.set_index(idx, phase)
 
     # update de control panel and visualization when interact with combobox buttons:
     def _data_nav(self, move: str) -> None:
@@ -212,62 +256,31 @@ class ControlPanel(ttk.Frame):
                 self.combobox.current(idx)
 
         elif move == "proximo":
-            if idx < len(self.dataset.participants) - 1:
+            if idx < len(self.dataset.participants["students"]) - 1:
                 idx += 1
                 self.combobox.current(idx)
 
         self.get_metadata(idx)
 
         headers = self.dataset.selected_headers
-        self.selected_participant = self.dataset.participants[idx]
-        self.visualization_area.show_matrix(self.selected_participant, headers, self.highlight_values.get())
-        self.visualization_area.show_mds(self.dataset, self.selected_participant, self.tags, idx)
 
-    # calls highlight method of visualization area:
-    def _hightlight_values(self) -> None:
-        idx = [self.combobox.current()]
-        if not idx:
-            return
+        p_participants = self.dataset.participants["professors"]
+        s_participants = self.dataset.participants["students"]
+        participants = p_participants + s_participants
 
-        headers = self.dataset.selected_headers
-        self.selected_participant = self.dataset.participants[idx[0]]
-        self.visualization_area.show_matrix(self.selected_participant, headers, self.highlight_values.get())
-        self.visualization_area.show_mds(self.dataset, self.selected_participant, self.tags, idx[0])
+        self.selected_participant = s_participants[idx]
 
-    # calls destaque method of visualization area:
-    def _destaque_view_values(self) -> None:
-        idx = [self.combobox.current()]
-        if not idx:
-            return
-
-        self.selected_participant = self.dataset.participants[idx[0]]
-        headers = self.dataset.selected_headers
-
-        self.visualization_area.show_matrix(self.selected_participant, headers, self.highlight_values.get())
-        self.visualization_area.show_mds(self.dataset, self.selected_participant, self.tags, idx[0])
-
-    # calls mean_view method of visualization area:
-    def _mean_view_values(self) -> None:
-        idx = [self.combobox.current()]
-        if not idx:
-            return
-
-        self.selected_participant = self.dataset.participants[idx[0]]
-
-        self.visualization_area.show_mds(self.dataset, self.selected_participant, self.tags, idx[0])
-
-    # calls destaque method of visualization area:
-    def _dispersion_view_values(self) -> None:
-        idx = [self.combobox.current()]
-        if not idx:
-            return
-
-        self.selected_participant = self.dataset.participants[idx[0]]
-
-        self.visualization_area.show_mds(self.dataset, self.selected_participant, self.tags, idx[0])
+        phase = self.phase_var.get()
+        self.visualization_area.set_index(idx, phase)
 
     # get information about the participant:
     def get_metadata(self, idx: int) -> None:
-        self.name_var.set(value=f"Nome: {self.dataset.participants[idx].name}")
-        self.group_var.set(value=f"Grupo: {self.dataset.participants[idx].group}")
-        self.level_var.set(value=f"Level: {self.dataset.participants[idx].familiarity_level}")
+        p_participants = self.dataset.participants["professors"]
+        s_participants = self.dataset.participants["students"]
+        participants = p_participants + s_participants
+
+        self.selected_participant = s_participants[idx]
+
+        self.name_var.set(value=f"Nome: {self.selected_participant.name}")
+        self.group_var.set(value=f"Grupo: {self.selected_participant.group}")
+        self.level_var.set(value=f"Nível: {self.selected_participant.familiarity_level}")
