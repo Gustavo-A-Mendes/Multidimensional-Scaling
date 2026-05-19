@@ -135,8 +135,8 @@ class VisualizationArea(ttk.Frame):
         self.data_content = ttk.Frame(self.data_view)
         self.data_ctrl = ScrollableFrame(self.data_view)
 
-        self.data_view.add(self.data_content, minsize=100)
-        self.data_view.add(self.data_ctrl, minsize=100)
+        self.data_view.add(self.data_content, minsize=100, stretch="always")
+        self.data_view.add(self.data_ctrl, minsize=100, stretch="never")
         self.data_view.update_idletasks()
         self.data_view.sash_place(0, self.data_view.winfo_width() - 200, 0)
 
@@ -232,8 +232,8 @@ class VisualizationArea(ttk.Frame):
 
         # Área de visualização
 
-        # Criando Figure do plot:
-        self.fig, self.ax = plt.subplots(figsize=(6, 6))
+        # Criando Figure do plot com layout ajustado e tamanho base menor
+        self.fig, self.ax = plt.subplots(figsize=(5, 5), tight_layout=True)
 
         self.canvas = FigureCanvasTkAgg(self.fig, self.mds_content)
 
@@ -383,8 +383,8 @@ class VisualizationArea(ttk.Frame):
 
         self.reset_view()
 
-        self.canvas.get_tk_widget().pack(fill="both")
-        self.nav_toolbar.pack()
+        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        self.nav_toolbar.pack(fill="x", side="bottom")
 
         # set list of scatter to plot data:
         self.scatters = []
