@@ -162,5 +162,6 @@ class ToolBar(ttk.Frame):
     # Na sua classe principal App:
     def abrir_exportacao(self):
         # Passa o self.dataset ou objeto que contém os dados processados
-        export_dialog = ExportWindow(self, self.dataset)
+        filtered = getattr(self.control_panel, "filtered_indices", None)
+        export_dialog = ExportWindow(self, self.dataset, filtered)
         self.wait_window(export_dialog)
