@@ -9,15 +9,19 @@ import os
 from mds_app.utils.export_functions import *
 
 class ExportWindow(tk.Toplevel):
-    def __init__(self, parent, app_data):
+    def __init__(self, parent, app_data, filtered_indices=None):
         super().__init__(parent)
-        self.title("Configurar Exportação de Dados")
-        # self.geometry("500x700")
-        self.app_data = app_data  # Referência aos seus dados (Dataset, MDS, etc)
+        self.title("Exportar Dados")
+        self.geometry("600x700")
+        self.app_data = app_data
+        self.filtered_indices = filtered_indices  # Referência aos seus dados (Dataset, MDS, etc)
 
         self.transient(parent)  # fica "presa" à janela pai
         self.grab_set()  # bloqueia interação com outras janelas
         self.focus_set()  # foco imediato
+        
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._cancel_export = False
 
         # Variáveis de Fases
         self.var_phase_pre = tk.BooleanVar(value=True)
@@ -27,6 +31,8 @@ class ExportWindow(tk.Toplevel):
         self.var_phase_pos = tk.BooleanVar(value=False)
         self.var_evolucao = tk.BooleanVar(value=False)
         self.has_pos = has_pos
+        
+        self.var_apply_ranking = tk.BooleanVar(value=False)
 
         # Variáveis de Controle
         self.var_matrizes = tk.BooleanVar(value=True)
@@ -56,6 +62,18 @@ class ExportWindow(tk.Toplevel):
         self.phase_pos_chk.pack(side="left", padx=10)
         self.evo_chk = ttk.Checkbutton(lf_phases, text="Incluir Evolução nos Gráficos (Requer Pós-teste)", variable=self.var_evolucao, state="disabled")
         self.evo_chk.pack(side="left", padx=10)
+        
+        # Filtro de Ranking
+        total_students = len(self.app_data.participants["students"])
+        if self.filtered_indices and len(self.filtered_indices) < total_students:
+            lf_ranking = ttk.LabelFrame(container, text="Filtro de Ranking", padding=5)
+            lf_ranking.pack(fill="x", pady=5)
+            self.ranking_chk = ttk.Checkbutton(
+                lf_ranking,
+                text=f"Aplicar Filtro de Ranking ativo (Exportar apenas {len(self.filtered_indices)} alunos)",
+                variable=self.var_apply_ranking
+            )
+            self.ranking_chk.pack(side="left", padx=10)
 
         # 1 e 2. Matrizes e Coordenadas
         lf_data = ttk.LabelFrame(container, text="Dados Numéricos", padding=5)
@@ -156,27 +174,43 @@ class ExportWindow(tk.Toplevel):
     def _executar_exportacao(self, filename):
         try:
             exportar_tudo_para_zip(
-                filename,
-                self.app_data,
-                self,
+                filename, 
+                self.app_data, 
+                self, 
+                self.filtered_indices if self.var_apply_ranking.get() else None,
                 progress_callback=self._update_progress
             )
 
-            self.after(0, lambda: messagebox.showinfo("Sucesso", "Exportação concluída!"))
-            self._set_ui_state(True)
-            self.after(0, self.destroy)
+            if not getattr(self, "_cancel_export", False):
+                self.after(0, lambda: messagebox.showinfo("Sucesso", "Exportação concluída!"))
+                self._set_ui_state(True)
+                self.after(0, self.destroy)
 
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror("Erro", str(e)))
-            self._set_ui_state(True)
+            import os
+            if os.path.exists(filename):
+                try:
+                    os.remove(filename)
+                except Exception:
+                    pass
+                    
+            if not getattr(self, "_cancel_export", False):
+                self.after(0, lambda e=e: messagebox.showerror("Erro", str(e)))
+                self._set_ui_state(True)
 
 
     def _update_progress(self, valor, total, texto=None):
+        if getattr(self, "_cancel_export", False):
+            raise Exception("Exportação cancelada pelo usuário.")
+            
         def update():
-            self.progress["maximum"] = total
-            self.progress["value"] = valor
-            if texto is not None:
-                self.progress_label.config(text=texto)
+            try:
+                self.progress["maximum"] = total
+                self.progress["value"] = valor
+                if texto is not None:
+                    self.progress_label.config(text=texto)
+            except Exception:
+                pass
 
         self.after(0, update)
 
@@ -210,5 +244,6 @@ class ExportWindow(tk.Toplevel):
 
     #
     def _on_close(self) -> None:
+        self._cancel_export = True
         self.grab_release()
         self.destroy()

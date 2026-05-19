@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from pandas.conftest import index
+
 from tksheet import Sheet
 
 import numpy as np
@@ -34,6 +34,7 @@ class VisualizationArea(ttk.Frame):
         self.id: int | None = None
         self.phase: str = "pre"
         self.curr_view = None
+        self.ranked_indices: list[int] = []
 
         # plot attributes:
         self.highlight_checkbox: ttk.Checkbutton | None = None
@@ -315,6 +316,33 @@ class VisualizationArea(ttk.Frame):
 
         ttk.Separator(ctrl_frame).pack(fill="x", padx=10, pady=10)
 
+        # --- Ranking ---
+        ranking_frame = ttk.LabelFrame(ctrl_frame, text="Filtro de Ranking", padding=5)
+        ranking_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.ranking_mode_var = tk.StringVar(value="Todos os Alunos")
+        self.ranking_combo = ttk.Combobox(
+            ranking_frame, 
+            textvariable=self.ranking_mode_var,
+            values=["Todos os Alunos", "Top Alinhados", "Top Divergentes", "Top Evolução"],
+            state="readonly"
+        )
+        self.ranking_combo.pack(fill="x", pady=2)
+        self.ranking_combo.bind("<<ComboboxSelected>>", lambda e: self.show_mds())
+        
+        spin_frame = ttk.Frame(ranking_frame)
+        spin_frame.pack(fill="x", pady=2)
+        ttk.Label(spin_frame, text="Quantidade (N):").pack(side="left")
+        self.ranking_n_var = tk.IntVar(value=5)
+        self.ranking_spin = ttk.Spinbox(
+            spin_frame, from_=1, to=100, width=5, textvariable=self.ranking_n_var, command=self.show_mds
+        )
+        self.ranking_spin.pack(side="right")
+        self.ranking_combo.bind("<Return>", lambda e: self.show_mds())
+        self.ranking_spin.bind("<Return>", lambda e: self.show_mds())
+        
+        ttk.Separator(ctrl_frame).pack(fill="x", padx=10, pady=10)
+
         self.all_selection_checkbox = ttk.Checkbutton(
             ctrl_frame,
             text="Selecionar Tudo",
@@ -524,9 +552,25 @@ class VisualizationArea(ttk.Frame):
         s_stds_ref = self.dataset.stds.get(f"students_{actual_phase}")
 
         p_centroids = p_centr_ref.copy() if p_centr_ref is not None else None
-        s_centroids = s_centr_ref.copy() if s_centr_ref is not None else None
+        
+        ranked_indices = self.get_ranked_indices(p_centroids)
+        
+        # Guardar e notificar o painel via evento (evita dependência cíclica)
+        if hasattr(self, "ranked_indices") and self.ranked_indices != ranked_indices:
+            self.ranked_indices = ranked_indices
+            self.event_generate("<<RankingUpdated>>")
+        else:
+            self.ranked_indices = ranked_indices
+
+        if self.ranking_mode_var.get() != "Todos os Alunos" and len(ranked_indices) > 0:
+            filtered_mds = self.mds_results[ranked_indices]
+            s_centroids = np.mean(filtered_mds, axis=0)
+            s_stds = np.std(filtered_mds, axis=0)
+        else:
+            s_centroids = s_centr_ref.copy() if s_centr_ref is not None else None
+            s_stds = s_stds_ref.copy() if s_stds_ref is not None else None
+            
         p_stds = p_stds_ref.copy() if p_stds_ref is not None else None
-        s_stds = s_stds_ref.copy() if s_stds_ref is not None else None
 
         highlight   = self.tags[0].get()
         destaque    = self.tags[1].get()
@@ -554,7 +598,7 @@ class VisualizationArea(ttk.Frame):
             self.ellipses_view.set(False)
 
         if dispersion:
-            curr_mds = self.mds_results
+            curr_mds = self.mds_results[ranked_indices]
         else:
             curr_mds = np.array([self.mds_results[self.id]])
 
@@ -638,9 +682,8 @@ class VisualizationArea(ttk.Frame):
 
                     # Destino 1: Ponto do Participante (se não estiver em modo "apenas médias")
                     if not self.s_mean_view.get():
-                        # curr_mds pode ter 1 ou N participantes (se for dispersão)
-                        # Vamos ligar o participante atual (index 0 ou o específico)
-                        pos_dest = curr_mds[0, i] if not dispersion else curr_mds[self.id, i]
+                        # curr_mds tem len = len(ranked_indices) ou 1
+                        pos_dest = curr_mds[0, i] if not dispersion else self.mds_results[self.id, i]
                         segmentos.append([pos_prof, pos_dest])
 
                     # Destino 2: Média dos Estudantes (se estiver ativa)
@@ -660,8 +703,13 @@ class VisualizationArea(ttk.Frame):
             evo_segs = []
             
             if self.s_mean_view.get():
-                s_centr_pre = self.dataset.centroids.get("students_pre")
-                s_centr_pos = self.dataset.centroids.get("students_pos")
+                if self.ranking_mode_var.get() != "Todos os Alunos" and len(ranked_indices) > 0:
+                    s_centr_pre = np.mean(self.mds_results_pre[ranked_indices], axis=0)
+                    s_centr_pos = s_centroids
+                else:
+                    s_centr_pre = self.dataset.centroids.get("students_pre")
+                    s_centr_pos = self.dataset.centroids.get("students_pos")
+                    
                 if s_centr_pre is not None and s_centr_pos is not None:
                     for i in range(self.num_concepts):
                         if self.concept_visibility[i].get():
@@ -670,7 +718,7 @@ class VisualizationArea(ttk.Frame):
                 if dispersion:
                     for i in range(self.num_concepts):
                         if self.concept_visibility[i].get():
-                            for j in range(len(self.mds_results_pre)):
+                            for j in ranked_indices:
                                 evo_segs.append([self.mds_results_pre[j, i], self.mds_results_pos[j, i]])
                 else:
                     for i in range(self.num_concepts):
@@ -697,7 +745,11 @@ class VisualizationArea(ttk.Frame):
             # retorna apenas o participante em destaque para a opacidade 1.0:
             if destaque:
                 if dispersion:
-                    new_colors[self.id, 3] = 1.0
+                    try:
+                        highlight_idx = ranked_indices.index(self.id)
+                        new_colors[highlight_idx, 3] = 1.0
+                    except ValueError:
+                        pass
                 else:
                     new_colors[0, 3] = 1.0
 
@@ -734,6 +786,39 @@ class VisualizationArea(ttk.Frame):
             self.evo_view_checkbox.state(['!alternate', '!disabled'])
         if phase == "pos":
             self.evo_view_checkbox.state(['alternate', 'disabled'])
+
+    def get_ranked_indices(self, p_centroids):
+        mode = self.ranking_mode_var.get()
+        n = self.ranking_n_var.get()
+        
+        num_students = len(self.mds_results)
+        all_indices = list(range(num_students))
+        
+        if mode == "Todos os Alunos" or p_centroids is None:
+            return all_indices
+            
+        distances = []
+        if mode in ["Top Alinhados", "Top Divergentes"]:
+            for j in range(num_students):
+                dist = np.sum(np.linalg.norm(self.mds_results[j] - p_centroids, axis=1))
+                distances.append(dist)
+                
+            sorted_indices = np.argsort(distances)
+            if mode == "Top Divergentes":
+                sorted_indices = sorted_indices[::-1]
+            return sorted_indices[:n].tolist()
+            
+        elif mode == "Top Evolução":
+            if self.phase != "pos" or self.mds_results_pre is None or self.mds_results_pos is None:
+                return all_indices
+                
+            for j in range(num_students):
+                dist_pre = np.sum(np.linalg.norm(self.mds_results_pre[j] - p_centroids, axis=1))
+                dist_pos = np.sum(np.linalg.norm(self.mds_results_pos[j] - p_centroids, axis=1))
+                distances.append(dist_pre - dist_pos)
+                
+            sorted_indices = np.argsort(distances)[::-1]
+            return sorted_indices[:n].tolist()
 
     # calls highlight method of visualization area:
     def _hightlight_values(self) -> None:

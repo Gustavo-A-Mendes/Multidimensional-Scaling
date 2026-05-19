@@ -18,6 +18,7 @@ class ControlPanel(ttk.Frame):
 
         self.selected_participant: Participant | None = None
         self.view_mode = tk.StringVar(value="default")
+        self.filtered_indices: list[int] = []
 
         self.radiobuttons: list[ttk.Radiobutton] = []
         self.combobox: ttk.Combobox | None  = None
@@ -32,6 +33,8 @@ class ControlPanel(ttk.Frame):
         # self.configure(width=250)
 
         self._create_widgets()
+        
+        self.visualization_area.bind("<<RankingUpdated>>", self._on_ranking_updated)
 
     # create the control panel area:
     def _create_widgets(self) -> None:
@@ -179,9 +182,8 @@ class ControlPanel(ttk.Frame):
                 pass
 
             if self.combobox:
-                p_names = [p.name for p in self.dataset.participants["professors"]]
                 s_names = [p.name for p in self.dataset.participants["students"]]
-                names = p_names + s_names
+                self.filtered_indices = list(range(len(s_names)))
                 self.combobox["values"] = s_names
                 self.combobox.current(0)
                 self.get_metadata(0)
@@ -224,43 +226,44 @@ class ControlPanel(ttk.Frame):
 
     # update de control panel and visualization when interact with combobox or listbox:
     def _on_select(self, event: tk.Event) -> None:
-        idx = self.combobox.current()
+        cb_idx = self.combobox.current()
 
-        # print(idx)
-        if idx is None:
+        if cb_idx is None or cb_idx < 0 or not self.filtered_indices:
             return
 
-        self.combobox.current(idx)
-        self.get_metadata(idx)
+        self.combobox.current(cb_idx)
+        global_idx = self.filtered_indices[cb_idx]
+        self.get_metadata(global_idx)
 
         headers: list[str] = self.dataset.selected_headers
 
         p_participants = self.dataset.participants["professors"]
         s_participants = self.dataset.participants["students"]
         participants = p_participants + s_participants
-        self.selected_participant = s_participants[idx]
+        self.selected_participant = s_participants[global_idx]
 
         phase = self.phase_var.get()
-        self.visualization_area.set_index(idx, phase)
+        self.visualization_area.set_index(global_idx, phase)
 
     # update de control panel and visualization when interact with combobox buttons:
     def _data_nav(self, move: str) -> None:
-        idx: int = self.combobox.current()
+        cb_idx: int = self.combobox.current()
 
-        if not self.dataset or idx < 0:
+        if not self.dataset or cb_idx < 0 or not self.filtered_indices:
             return
 
         if move == "anterior":
-            if idx > 0:
-                idx -= 1
-                self.combobox.current(idx)
+            if cb_idx > 0:
+                cb_idx -= 1
+                self.combobox.current(cb_idx)
 
         elif move == "proximo":
-            if idx < len(self.dataset.participants["students"]) - 1:
-                idx += 1
-                self.combobox.current(idx)
+            if cb_idx < len(self.filtered_indices) - 1:
+                cb_idx += 1
+                self.combobox.current(cb_idx)
 
-        self.get_metadata(idx)
+        global_idx = self.filtered_indices[cb_idx]
+        self.get_metadata(global_idx)
 
         headers = self.dataset.selected_headers
 
@@ -268,10 +271,35 @@ class ControlPanel(ttk.Frame):
         s_participants = self.dataset.participants["students"]
         participants = p_participants + s_participants
 
-        self.selected_participant = s_participants[idx]
+        self.selected_participant = s_participants[global_idx]
 
         phase = self.phase_var.get()
-        self.visualization_area.set_index(idx, phase)
+        self.visualization_area.set_index(global_idx, phase)
+
+    def update_combobox(self, ranked_indices: list[int]) -> None:
+        if not self.combobox:
+            return
+            
+        s_names = [self.dataset.participants["students"][i].name for i in ranked_indices]
+        
+        self.filtered_indices = ranked_indices
+        self.combobox["values"] = s_names
+        
+        if len(ranked_indices) > 0:
+            # try to maintain the selection if possible
+            if self.selected_participant and self.selected_participant.name in s_names:
+                idx = s_names.index(self.selected_participant.name)
+                self.combobox.current(idx)
+            else:
+                self.combobox.current(0)
+                self._on_select(None)
+        else:
+            self.combobox.set("")
+            self.text_var.set("Nenhum estudante no filtro.")
+
+    def _on_ranking_updated(self, event=None) -> None:
+        if hasattr(self.visualization_area, "ranked_indices"):
+            self.update_combobox(self.visualization_area.ranked_indices)
 
     # get information about the participant:
     def get_metadata(self, idx: int) -> None:

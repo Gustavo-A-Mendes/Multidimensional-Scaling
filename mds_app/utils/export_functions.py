@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.collections import PathCollection, LineCollection
 
 import pandas as pd
@@ -19,8 +20,13 @@ def gerar_plot_para_exportar(dados_aluno, config_opcoes):
     return buf.getvalue()  # Retorna os bytes da imagem
 
 
-def exportar_tudo_para_zip(zip_path, data, ui_config, progress_callback=None):
-    alunos = data.participants["students"]
+def exportar_tudo_para_zip(zip_path, data, ui_config, filtered_indices=None, progress_callback=None):
+    alunos_orig = data.participants["students"]
+    if filtered_indices is not None:
+        alunos = [alunos_orig[i] for i in filtered_indices]
+    else:
+        alunos = alunos_orig
+        
     professores = data.participants["professors"]
     total_participant = professores + alunos
 
@@ -46,6 +52,18 @@ def exportar_tudo_para_zip(zip_path, data, ui_config, progress_callback=None):
             alunos_centroid = data.centroids.get(f"students_{phase}")
             professores_mean = data.mean.get("professors")
             professores_centroid = data.centroids.get("professors")
+            
+            if filtered_indices is not None and len(filtered_indices) > 0:
+                filtered_mds = data.alinhados.get(f"students_{phase}")
+                if filtered_mds is not None:
+                    alunos_mean = None # For matrices we don't recalculate the raw matrix mean, wait, yes we can!
+                    filtered_df = [data.participants["students"][i].dataframe for i in filtered_indices]
+                    # But the mean of dataframes is not easily calculated here. Let's stick to centroid mean.
+                    # Wait, if we use filtered_indices, we won't output Média_Turma in Matrices, or we output the global.
+                    # Let's keep alunos_mean global for matrices, or calculate it.
+                    # Actually, data.mean["students"] is what we have. It's complex to average DataFrames.
+                    filtered_mds_subset = [filtered_mds[i] for i in filtered_indices]
+                    alunos_centroid = np.mean(filtered_mds_subset, axis=0)
             
             # --- EXPORTAÇÃO DE MATRIZES ---
             if ui_config.var_matrizes.get():
@@ -139,7 +157,7 @@ def exportar_tudo_para_zip(zip_path, data, ui_config, progress_callback=None):
             if ui_config.var_plot_media.get():
                 if progress_callback: progress_callback(current_step, total_steps, f"Gerando média da turma ({phase_name})...")
 
-                img_media = gerar_imagem_media(data, phase, limite, ui_config)
+                img_media = gerar_imagem_media(data, phase, limite, ui_config, filtered_indices)
                 if img_media is not None:
                     zf.writestr(f"{phase_name}/plot_turma/mds_media_turma_{phase}.png", img_media)
 
@@ -209,15 +227,23 @@ def gerar_imagem_mds(aluno, data, phase, headers, limite, ui_config):
     return buf.getvalue()
 
 
-def gerar_imagem_media(data, phase, limite, ui_config):
-    alunos = data.alinhados.get(f"students_{phase}")
-    alunos_centroid = data.centroids.get(f"students_{phase}")
+def gerar_imagem_media(data, phase, limite, ui_config, filtered_indices=None):
+    alunos_all = data.alinhados.get(f"students_{phase}")
+    
+    if alunos_all is None: return None
+    
+    if filtered_indices is not None and len(filtered_indices) > 0:
+        alunos = [alunos_all[i] for i in filtered_indices]
+        alunos_centroid = np.mean(alunos, axis=0)
+        aluno_std = np.std(alunos, axis=0)
+    else:
+        alunos = alunos_all
+        alunos_centroid = data.centroids.get(f"students_{phase}")
+        aluno_std = data.stds.get(f"students_{phase}")
+        
     headers = data.headers
     professores_centroid = data.centroids.get("professors")
-    aluno_std = data.stds.get(f"students_{phase}")
     opcao = ui_config.opt_media.get()
-    
-    if alunos_centroid is None: return None
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111)
