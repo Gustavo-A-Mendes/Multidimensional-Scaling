@@ -182,12 +182,14 @@ class ControlPanel(ttk.Frame):
                 pass
 
             if self.combobox:
-                s_names = [p.name for p in self.dataset.participants["students"]]
-                self.filtered_indices = list(range(len(s_names)))
+                phase = self.phase_var.get()
+                s_names = [p.name for p in self.dataset.participants["students"] if getattr(p, f"dataframe_{phase}") is not None]
+                self.filtered_indices = [i for i, p in enumerate(self.dataset.participants["students"]) if getattr(p, f"dataframe_{phase}") is not None]
                 self.combobox["values"] = s_names
-                self.combobox.current(0)
-                self.get_metadata(0)
-                self.visualization_area.set_index(0)
+                if s_names:
+                    self.combobox.current(0)
+                    self.get_metadata(self.filtered_indices[0])
+                    self.visualization_area.set_index(self.filtered_indices[0])
 
         self.info_label.pack(padx=10, pady=10)
 
@@ -214,15 +216,27 @@ class ControlPanel(ttk.Frame):
 
         idx = self.combobox.current()
 
-        # print(idx)
         if idx is None or idx < 0:
             return
 
-        self.view_mode.set(value=status)
-        
         phase = self.phase_var.get()
+        # Atualiza a lista da combobox para mostrar apenas os alunos que participaram desta fase
+        s_names = [p.name for p in self.dataset.participants["students"] if getattr(p, f"dataframe_{phase}") is not None]
+        self.filtered_indices = [i for i, p in enumerate(self.dataset.participants["students"]) if getattr(p, f"dataframe_{phase}") is not None]
+        
+        self.combobox["values"] = s_names
+        if s_names:
+            if idx >= len(s_names):
+                idx = 0
+            self.combobox.current(idx)
+        else:
+            idx = -1
+            
+        global_idx = self.filtered_indices[idx] if self.filtered_indices and idx >= 0 else 0
 
-        self.visualization_area.set_index(idx, phase, status)
+        self.view_mode.set(value=status)
+
+        self.visualization_area.set_index(global_idx, phase, status)
 
     # update de control panel and visualization when interact with combobox or listbox:
     def _on_select(self, event: tk.Event) -> None:

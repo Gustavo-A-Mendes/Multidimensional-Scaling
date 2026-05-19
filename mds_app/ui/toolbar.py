@@ -33,10 +33,16 @@ class ToolBar(ttk.Frame):
         # ----------------------------------------------------------------------
 
         # button
-        self.btn_import = ttk.Button(
+        self.btn_import_pre = ttk.Button(
             self,
-            text="Importar Dados",
-            command=self.import_csv
+            text="Importar Pré-teste",
+            command=lambda: self.import_csv(phase="Pré-teste")
+        )
+        self.btn_import_pos = ttk.Button(
+            self,
+            text="Adicionar Pós-teste",
+            command=lambda: self.import_csv(phase="Pós-teste"),
+            state="disabled"
         )
         self.btn_export = ttk.Button(
             self,
@@ -62,14 +68,15 @@ class ToolBar(ttk.Frame):
         # ----------------------------------------------------------------------
         # setting layout:
         # ----------------------------------------------------------------------
-        self.btn_import.pack(side="left", padx=5)
+        self.btn_import_pre.pack(side="left", padx=5)
+        self.btn_import_pos.pack(side="left", padx=5)
         self.btn_export.pack(side="left", padx=5)
         # self.btn_manual.pack(side="left", padx=5)
         # self.btn_manage.pack(side="left", padx=5)
         # self.btn_mds.pack(side="left", padx=5)
 
     # toolbar methods:
-    def import_csv(self) -> None:
+    def import_csv(self, phase: str = "Pré-teste") -> None:
 
         file_path = Path(filedialog.askopenfilename(
             filetypes=[
@@ -95,7 +102,7 @@ class ToolBar(ttk.Frame):
             participants_data, headers = separate_df(df, file_type, ext)
 
             unk_group = any(p.group == ' - ' for p in participants_data)
-            print(any(p.group == ' - ' for p in participants_data))
+            # print(any(p.group == ' - ' for p in participants_data))
 
             if unk_group:
                 def on_confirm(new_group: str):
@@ -107,10 +114,18 @@ class ToolBar(ttk.Frame):
                 self.wait_window(dialog)
 
 
-            # print(any(p.group == ' - ' for p in participants_data))
+            # Set the phase manually for all participants
+            for p in participants_data:
+                p.phase = phase
 
-            self.dataset.set_new_participants(participants_data)
-            self.dataset.set_headers(headers)
+            if phase == "Pré-teste":
+                self.dataset.set_new_participants(participants_data)
+                self.dataset.set_headers(headers)
+                # Habilita o botão do pós-teste
+                self.btn_import_pos.state(["!disabled"])
+            else:
+                # Se for Pós-teste, apenas adiciona ao dataset existente
+                self.dataset.add_participants(participants_data)
 
             # Se não tem alunos, talvez nem faça sentido continuar o plot
             if not self.dataset.has_students:
@@ -150,6 +165,13 @@ class ToolBar(ttk.Frame):
             self.visualization_area.create_mds()
 
             self.control_panel.refresh()
+            
+            if phase == "Pré-teste":
+                self.control_panel.phase_var.set("pre")
+            else:
+                self.control_panel.phase_var.set("pos")
+                
+            self.control_panel._enable_ctrl() # força a UI a ler o novo valor de phase_var
 
             self.visualization_area.refresh()
 

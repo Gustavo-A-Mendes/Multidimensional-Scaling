@@ -1,6 +1,6 @@
 import tkinter as tk
 import os
-from ui.main_window import MainWindow
+from mds_app.ui.main_window import MainWindow
 
 def main():
     root = tk.Tk()

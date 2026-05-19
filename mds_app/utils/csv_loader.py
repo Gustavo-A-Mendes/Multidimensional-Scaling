@@ -112,7 +112,6 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
     names_temp = []
     groups_temp = []
     levels_temp = []
-    phases_temp = []
     keywords = []
     data_columns = []
 
@@ -137,9 +136,6 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
 
                 if "nível" in col.lower():
                     levels_temp = df[col].tolist()
-
-                if "fase" in col.lower() or "momento" in col.lower() or "etapa" in col.lower() or "periodo" in col.lower() or "período" in col.lower():
-                    phases_temp = df[col].tolist()
 
                 # proceeding...
 
@@ -214,8 +210,6 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
                     group = f" - " if not groups_temp or pd.isna(groups_temp[idx]) else groups_temp[idx]
                     level = f" - " if not levels_temp or pd.isna(levels_temp[idx]) else levels_temp[idx]
 
-                phase = "pre" if not phases_temp or pd.isna(phases_temp[idx]) else phases_temp[idx]
-
                 if name in participants_dict:
                     participant_data = participants_dict[name]
                 else:
@@ -227,7 +221,7 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
                     )
                     participants_dict[name] = participant_data
                 
-                participant_data.add_dataframe(mat, str(phase))
+                participant_data.add_dataframe(mat, "pre")
 
             participants_data = list(participants_dict.values())
 

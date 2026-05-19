@@ -95,6 +95,38 @@ class Dataset:
             self.participants["students"].append(participant)
             self.has_students = True
 
+    def add_participants(self, participants: list[Participant]) -> None:
+        if self.participants is None:
+            self.participants = {
+                "professors": [],
+                "students": []
+            }
+
+        for p_new in participants:
+            group_key = "professors" if p_new.group.upper() == "PROFESSOR" else "students"
+            
+            # Tentar encontrar o participante existente pelo nome para fundir os dados
+            existing_p = next((p for p in self.participants[group_key] if p.name == p_new.name), None)
+            
+            if existing_p:
+                # Mescla a matriz lida no pós-teste para dentro do objeto existente
+                if p_new.dataframe_pre is not None:
+                    existing_p.add_dataframe(p_new.dataframe_pre, phase="pos")
+            else:
+                # Participante novo que só respondeu o pós-teste
+                if p_new.dataframe_pre is not None:
+                    p_new.add_dataframe(p_new.dataframe_pre, phase="pos")
+                    p_new.dataframe_pre = None
+                    p_new.mds_result_pre = None
+                    
+                p_new.pid = len(self.participants[group_key])
+                self.participants[group_key].append(p_new)
+                
+                if group_key == "professors":
+                    self.has_professors = True
+                else:
+                    self.has_students = True
+
     #
     def set_headers(self, headers: list[str]) -> None:
         self.headers = list(headers)

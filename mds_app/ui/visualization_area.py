@@ -485,9 +485,12 @@ class VisualizationArea(ttk.Frame):
             participant_df = getattr(s_participants[self.id], f"dataframe_{actual_phase}")
             if participant_df is None:
                 participant_df = s_participants[self.id].dataframe_pre
-            df = participant_df.loc[headers, headers]
-        # headers = headers
-        # print(headers)
+            
+            if participant_df is not None:
+                df = participant_df.loc[headers, headers]
+            else:
+                df = pd.DataFrame(np.nan, index=headers, columns=headers)
+
         self.sheet.headers(headers)
 
         row_index = list(df.index.astype(str))
@@ -552,7 +555,11 @@ class VisualizationArea(ttk.Frame):
                 if mds and mds.X_aligned is not None:
                     res.append(mds.X_aligned)
                 else:
-                    res.append(p.mds_result_pre.X_aligned)
+                    if p.mds_result_pre and p.mds_result_pre.X_aligned is not None:
+                        res.append(p.mds_result_pre.X_aligned)
+                    else:
+                        num_concepts = len(self.dataset.headers)
+                        res.append(np.full((num_concepts, 2), np.nan))
             return np.array(res)
 
         self.mds_results_pre = get_valid_mds(s_participants, "pre")
@@ -579,11 +586,15 @@ class VisualizationArea(ttk.Frame):
 
         if self.ranking_mode_var.get() != "Todos os Alunos" and len(ranked_indices) > 0:
             filtered_mds = self.mds_results[ranked_indices]
-            s_centroids = np.mean(filtered_mds, axis=0)
-            s_stds = np.std(filtered_mds, axis=0)
+            s_centroids = np.nanmean(filtered_mds, axis=0)
+            s_stds = np.nanstd(filtered_mds, axis=0)
         else:
-            s_centroids = s_centr_ref.copy() if s_centr_ref is not None else None
-            s_stds = s_stds_ref.copy() if s_stds_ref is not None else None
+            if len(self.mds_results) > 0:
+                s_centroids = np.nanmean(self.mds_results, axis=0)
+                s_stds = np.nanstd(self.mds_results, axis=0)
+            else:
+                s_centroids = None
+                s_stds = None
             
         p_stds = p_stds_ref.copy() if p_stds_ref is not None else None
 
