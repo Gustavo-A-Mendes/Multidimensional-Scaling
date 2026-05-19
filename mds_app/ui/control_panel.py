@@ -243,7 +243,8 @@ class ControlPanel(ttk.Frame):
         self.selected_participant = s_participants[global_idx]
 
         phase = self.phase_var.get()
-        self.visualization_area.set_index(global_idx, phase)
+        status = self.radio_var.get()
+        self.visualization_area.set_index(global_idx, phase, status)
 
     # update de control panel and visualization when interact with combobox buttons:
     def _data_nav(self, move: str) -> None:

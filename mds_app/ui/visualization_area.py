@@ -222,8 +222,8 @@ class VisualizationArea(ttk.Frame):
         self.mds_content = ttk.Frame(self.mds_view)
         self.mds_ctrl = ScrollableFrame(self.mds_view)
 
-        self.mds_view.add(self.mds_content, minsize=100)
-        self.mds_view.add(self.mds_ctrl, minsize=100)
+        self.mds_view.add(self.mds_content, minsize=100, stretch="always")
+        self.mds_view.add(self.mds_ctrl, minsize=100, stretch="never")
         self.mds_view.update_idletasks()
         self.mds_view.sash_place(0, self.mds_view.winfo_width() - 200, 0)
 
@@ -241,11 +241,10 @@ class VisualizationArea(ttk.Frame):
         self.nav_toolbar.update()
 
         # ==================================================
-        participants = self.dataset.participants["professors"] + self.dataset.participants["students"]
-        # participant = participants[self.id]
+        s_participants = self.dataset.participants["students"]
 
         self.num_concepts = len(self.dataset.headers)
-        self.num_participants = len(participants)
+        self.num_participants = len(s_participants)
         self.p_mean_view = tk.BooleanVar(value=False)
         self.s_mean_view = tk.BooleanVar(value=False)
         self.ellipses_view = tk.BooleanVar(value=False)
@@ -328,19 +327,34 @@ class VisualizationArea(ttk.Frame):
             state="readonly"
         )
         self.ranking_combo.pack(fill="x", pady=2)
-        self.ranking_combo.bind("<<ComboboxSelected>>", lambda e: self.show_mds())
+        self.ranking_combo.bind("<<ComboboxSelected>>", lambda e: self.atualizar_estado_ranking())
         
         spin_frame = ttk.Frame(ranking_frame)
         spin_frame.pack(fill="x", pady=2)
-        ttk.Label(spin_frame, text="Quantidade (N):").pack(side="left")
+        self.quantidade_label = ttk.Label(spin_frame, text="Quantidade (N):")
+        self.quantidade_label.pack(side="left")
+
         self.ranking_n_var = tk.IntVar(value=5)
         self.ranking_spin = ttk.Spinbox(
-            spin_frame, from_=1, to=100, width=5, textvariable=self.ranking_n_var, command=self.show_mds
+            spin_frame, from_=1, to=self.num_participants, width=5, textvariable=self.ranking_n_var
         )
         self.ranking_spin.pack(side="right")
-        self.ranking_combo.bind("<Return>", lambda e: self.show_mds())
+        self.ranking_combo.bind("<<ComboboxSelected>>", lambda e: self.atualizar_estado_ranking())
+        self.ranking_combo.bind("<Return>", lambda e: self.atualizar_estado_ranking())
         self.ranking_spin.bind("<Return>", lambda e: self.show_mds())
         
+        def _on_spin_change(*args):
+            try:
+                # Se for número válido e maior que 0, atualiza
+                val = self.ranking_n_var.get()
+                if val > 0:
+                    self.show_mds()
+            except Exception as e:
+                # Impede que o Tkinter quebre silenciosamente o trace
+                print(f"Silenced error in spin change: {e}")
+                
+        self.ranking_n_var.trace_add("write", _on_spin_change)
+
         ttk.Separator(ctrl_frame).pack(fill="x", padx=10, pady=10)
 
         self.all_selection_checkbox = ttk.Checkbutton(
@@ -433,10 +447,11 @@ class VisualizationArea(ttk.Frame):
     def refresh(self):
         index = self.id
         dataset = self.dataset
-        participant = dataset.participants["students"][index]
         header = dataset.headers
 
         self.show_matrix(header)
+
+        self.atualizar_estado_ranking()
         self.show_mds()
 
     #
@@ -771,26 +786,13 @@ class VisualizationArea(ttk.Frame):
         self.ax.set_aspect('equal')
         self.canvas.draw()
 
-    #
-    def enable_ctrl(self, status, phase):
-        if status == "default":
-            self.s_mean_view.set(False)
-            self.destaque_view_values.set(True)
-            self.destaque_view_checkbox.state(['!alternate', '!disabled'])
-        if status == "mean":
-            self.s_mean_view.set(True)
-            self.destaque_view_values.set(False)
-            self.destaque_view_checkbox.state(['alternate', 'disabled'])
-
-        if phase == "pre":
-            self.evo_view_checkbox.state(['!alternate', '!disabled'])
-        if phase == "pos":
-            self.evo_view_checkbox.state(['alternate', 'disabled'])
-
     def get_ranked_indices(self, p_centroids):
         mode = self.ranking_mode_var.get()
-        n = self.ranking_n_var.get()
-        
+        try:
+            n = self.ranking_n_var.get()
+        except tk.TclError:
+            n = 5 # Valor de fallback seguro caso a caixa fique vazia temporariamente
+            
         num_students = len(self.mds_results)
         all_indices = list(range(num_students))
         
@@ -809,7 +811,7 @@ class VisualizationArea(ttk.Frame):
             return sorted_indices[:n].tolist()
             
         elif mode == "Top Evolução":
-            if self.phase != "pos" or self.mds_results_pre is None or self.mds_results_pos is None:
+            if self.mds_results_pre is None or self.mds_results_pos is None:
                 return all_indices
                 
             for j in range(num_students):
@@ -887,6 +889,21 @@ class VisualizationArea(ttk.Frame):
         self.show_mds()
 
     #
+    def atualizar_estado_ranking(self):
+        # Verifica o valor selecionado no Combobox
+        if self.ranking_mode_var.get() == "Todos os Alunos":
+            # Desabilita o Spinbox e muda a cor do Label para parecer desativado
+            self.ranking_spin.config(state="disabled")
+            self.quantidade_label.config(foreground="gray")
+        else:
+            # Reabilita o Spinbox e volta a cor do Label ao normal
+            self.ranking_spin.config(state="normal")
+            self.quantidade_label.config(foreground="")
+
+        # Executa a sua função original de atualizar os dados na tela
+        self.show_mds()
+
+    #
     def set_index(self, idx: int, phase: str = "pre", status: str = "default") -> None:
         self.id = idx
         self.phase = phase
@@ -902,8 +919,13 @@ class VisualizationArea(ttk.Frame):
 
         if phase == "pre":
             self.evo_view_checkbox.state(['alternate', 'disabled'])
+            self.ranking_combo["values"] = ["Todos os Alunos", "Top Alinhados", "Top Divergentes"]
+            if self.ranking_mode_var.get() == "Top Evolução":
+                self.ranking_mode_var.set("Todos os Alunos")
+                self.atualizar_estado_ranking()
         if phase == "pos":
             self.evo_view_checkbox.state(['!alternate', '!disabled'])
+            self.ranking_combo["values"] = ["Todos os Alunos", "Top Alinhados", "Top Divergentes", "Top Evolução"]
 
         self.refresh()
 
