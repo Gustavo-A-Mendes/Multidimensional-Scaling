@@ -113,7 +113,7 @@ class MainWindow:
         cards_frame.pack(fill="x", pady=10)
 
         # Pré-teste
-        pre_frame = ttk.Labelframe(cards_frame, text="Formulário Pré-teste", padding=15)
+        pre_frame = ttk.Labelframe(cards_frame, text="Formulário Pré-aulas", padding=15)
         pre_frame.pack(fill="x", pady=10)
         
         self.lbl_pre_url = ttk.Label(pre_frame, text="URL não gerada")
@@ -125,7 +125,7 @@ class MainWindow:
         ttk.Button(pre_btns, text="Abrir no Navegador", bootstyle="secondary-outline", command=lambda: webbrowser.open(self.pre_url) if self.pre_url else None).pack(side="left")
 
         # Pós-teste
-        pos_frame = ttk.Labelframe(cards_frame, text="Formulário Pós-teste", padding=15)
+        pos_frame = ttk.Labelframe(cards_frame, text="Formulário Pós-aulas", padding=15)
         pos_frame.pack(fill="x", pady=10)
         
         self.lbl_pos_url = ttk.Label(pos_frame, text="URL não gerada")
@@ -189,7 +189,7 @@ class MainWindow:
 
     def _process_generation(self, concepts):
         try:
-            result = create_forms(self.creds, concepts)
+            result = create_forms(self.creds, concepts, "Análise de Similaridade")
 
             self.pre_url = result["pre_url"]
             self.pos_url = result["pos_url"]
@@ -207,7 +207,7 @@ class MainWindow:
         
         self.notebook.tab(self.tab3, state="normal")
         self.notebook.select(self.tab3)
-        messagebox.showinfo("Sucesso", "Formulários Pré e Pós-teste gerados com sucesso!")
+        messagebox.showinfo("Sucesso", "Formulários Pré e Pós-aulas gerados com sucesso!")
 
     def run(self):
         self.window.mainloop()
