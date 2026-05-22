@@ -146,9 +146,13 @@ class MDSEngine:
         """
         # Validação extra: O algébrico NÃO aceita NaNs
         if np.any(np.isnan(self.D)):
-            # Aqui você pode aplicar a imputação por média discutida antes
-            media = np.nanmean(self.D, dtype=np.float64)
-            self.D = np.where(np.isnan(self.D), media, self.D)  # np.where([condition], [isTrue], [isFalse]
+            if np.all(np.isnan(self.D)):
+                media = 0.0
+            else:
+                media = np.nanmean(self.D, dtype=np.float64)
+                if np.isnan(media):
+                    media = 0.0
+            self.D = np.where(np.isnan(self.D), media, self.D)
 
         # Compute Gram matrix:
         self.gram_ = self.__gram_matrix()
@@ -276,7 +280,7 @@ class MDSEngine:
         # Verifica validade dos dados:
         if len(eigvals) < self.n_components:
             raise ValueError(
-                "Number of positive eigenvalues is smaller than n_components."
+                "Erro de Consistência nos Dados: Não foi possível realizar a redução dimensional (MDS) porque o número de autovalores positivos é menor que a dimensão solicitada (2). Verifique se os dados inseridos possuem variação e número de itens suficientes."
             )
 
         self.eigenvalues = eigvals
@@ -303,5 +307,7 @@ class MDSEngine:
 
         num = float(np.sum((self.D[mask] - self.D_hat[mask]) ** 2))
         den = float(np.sum(self.D[mask] ** 2))
+        if den == 0:
+            return 0.0
         stress = np.sqrt(num / den)
         return stress

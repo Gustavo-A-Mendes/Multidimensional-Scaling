@@ -137,8 +137,8 @@ class VisualizationArea(ttk.Frame):
 
         self.data_view.add(self.data_content, minsize=100, stretch="always")
         self.data_view.add(self.data_ctrl, minsize=100, stretch="never")
-        self.data_view.update_idletasks()
-        self.data_view.sash_place(0, self.data_view.winfo_width() - 200, 0)
+        self.update()  # Força atualização completa do layout geométrico para obter a largura real
+        self.data_view.sash_place(0, self.data_view.winfo_width() - 250, 0)
 
         # sheet
         self.sheet = Sheet(
@@ -224,20 +224,25 @@ class VisualizationArea(ttk.Frame):
 
         self.mds_view.add(self.mds_content, minsize=100, stretch="always")
         self.mds_view.add(self.mds_ctrl, minsize=100, stretch="never")
-        self.mds_view.update_idletasks()
-        self.mds_view.sash_place(0, self.mds_view.winfo_width() - 200, 0)
+        self.update()  # Força atualização completa do layout geométrico para obter a largura real
+        self.mds_view.sash_place(0, self.mds_view.winfo_width() - 250, 0)
 
         ttk.Label(self.mds_content, text="Configuração da Análise",
                   font=("Arial", 12, "bold")).pack(pady=10)
 
         # Área de visualização
 
-        # Criando Figure do plot com layout ajustado e tamanho base menor
-        self.fig, self.ax = plt.subplots(figsize=(5, 5), tight_layout=True)
+        # Criando Figure do plot com constrained_layout e base (6, 6) compacta para evitar transbordamento inicial
+        self.fig, self.ax = plt.subplots(figsize=(6, 6), constrained_layout=True)
+
+        # Contêiner dedicado para a barra de ferramentas na parte inferior
+        self.toolbar_frame = ttk.Frame(self.mds_content)
+        self.toolbar_frame.pack(side="bottom", fill="x")
 
         self.canvas = FigureCanvasTkAgg(self.fig, self.mds_content)
 
-        self.nav_toolbar = NavigationToolbar2Tk(self.canvas, self.mds_content)
+        # Associamos a barra de ferramentas ao contêiner dedicado inferior
+        self.nav_toolbar = NavigationToolbar2Tk(self.canvas, self.toolbar_frame)
         self.nav_toolbar.update()
 
         # ==================================================
@@ -367,9 +372,10 @@ class VisualizationArea(ttk.Frame):
 
         for i in range(self.num_concepts):
             header = self.dataset.headers[i]
+            generic_name = self.dataset.concept_mapping.get(header, f"C{i+1}")
             btn = ttk.Checkbutton(
                 ctrl_frame,
-                text=header,
+                text=generic_name,
                 variable=self.concept_visibility[i],
                 command=self.show_mds
             )
@@ -383,8 +389,14 @@ class VisualizationArea(ttk.Frame):
 
         self.reset_view()
 
-        self.canvas.get_tk_widget().pack(fill="both", expand=True)
-        self.nav_toolbar.pack(fill="x", side="bottom")
+        # O canvas é empacotado no topo e expande para preencher o espaço restante,
+        # enquanto a toolbar_frame já está garantida e empacotada na base (bottom)
+        self.canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
+
+        # Desabilita a propagação de empacotamento no contêiner para travar seu tamanho
+        # ao espaço estritamente definido pelo PanedWindow, impedindo que chamadas de draw()
+        # forcem o crescimento do frame e cortem o gráfico
+        self.mds_content.pack_propagate(False)
 
         # set list of scatter to plot data:
         self.scatters = []
@@ -412,7 +424,7 @@ class VisualizationArea(ttk.Frame):
                 fontweight='bold',
                 color=cmap(i % 20),  # Mesma cor do conceito
                 ha='center',  # Alinhamento horizontal: centro
-                va='bottom',  # Alinhamento vertical: abaixo do ponto (o texto fica em cima)
+                va='center',  # Alinhamento vertical centralizado para melhor encaixe das direções de offsets
                 visible=False
             )
             self.concept_labels.append(txt)
@@ -464,6 +476,13 @@ class VisualizationArea(ttk.Frame):
         p_participants = self.dataset.participants["professors"]
         s_participants = self.dataset.participants["students"]
         participants = p_participants + s_participants
+        
+        if self.id is None or self.id < 0 or not s_participants or self.id >= len(s_participants):
+            self.sheet.set_sheet_data([])
+            self.sheet.headers([])
+            self.sheet.row_index([])
+            self.sheet.refresh()
+            return
         # -----------------------------
         # clear sheet:
         # -----------------------------
@@ -491,10 +510,9 @@ class VisualizationArea(ttk.Frame):
             else:
                 df = pd.DataFrame(np.nan, index=headers, columns=headers)
 
-        self.sheet.headers(headers)
-
-        row_index = list(df.index.astype(str))
-        self.sheet.row_index(row_index)
+        generic_headers = [self.dataset.concept_mapping.get(h, h) for h in headers]
+        self.sheet.headers(generic_headers)
+        self.sheet.row_index(generic_headers)
 
         # -----------------------------
         # insert (and style) data:
@@ -544,9 +562,21 @@ class VisualizationArea(ttk.Frame):
 
     #
     def show_mds(self) -> None:
-        p_participants = self.dataset.participants["professors"]
-        s_participants = self.dataset.participants["students"]
-        participants = p_participants + s_participants
+        p_participants = self.dataset.participants.get("professors") if self.dataset.participants else None
+        s_participants = self.dataset.participants.get("students") if self.dataset.participants else None
+        
+        if not p_participants and not s_participants:
+            return
+            
+        participants = (p_participants or []) + (s_participants or [])
+        
+        if self.id is None or self.id < 0 or not s_participants or self.id >= len(s_participants):
+            self.ax.clear()
+            self.ax.set_xlabel("Dimensão 1")
+            self.ax.set_ylabel("Dimensão 2")
+            self.ax.grid(True, linestyle='--', alpha=0.5)
+            self.canvas.draw_idle()
+            return
 
         def get_valid_mds(p_list, ph):
             res = []
@@ -659,6 +689,23 @@ class VisualizationArea(ttk.Frame):
                 scat.set_offsets(np.column_stack((s_xs, s_ys)))
 
         # concept text:
+        limite = self.dataset.get_global_limits()
+        plot_range = limite[1] - limite[0]
+        proximity_threshold = 0.06 * plot_range  # threshold de 6% do range do gráfico
+        placed_positions = []
+        
+        # 8 direções ordenadas de offset para resolver colisões de forma uniforme
+        offsets = [
+            (0.0, 0.12),    # Acima
+            (0.0, -0.22),   # Abaixo
+            (0.18, -0.05),  # Direita
+            (-0.18, -0.05), # Esquerda
+            (0.13, 0.13),   # Superior Direito
+            (-0.13, -0.18), # Inferior Esquerdo
+            (0.13, -0.18),  # Inferior Direito
+            (-0.13, 0.13)   # Superior Esquerdo
+        ]
+
         for i, txt in enumerate(self.concept_labels):
             # A visibilidade do texto segue a visibilidade do conceito
             # e a escolha do usuário de ver nomes
@@ -668,8 +715,9 @@ class VisualizationArea(ttk.Frame):
             txt.set_visible(visibility)
 
             if visibility:
-                # 1. Define o que será escrito (o nome do conceito vindo do header)
-                txt.set_text(self.dataset.headers[i])
+                # 1. Define o que será escrito (o nome genérico do conceito)
+                generic_name = self.dataset.concept_mapping.get(self.dataset.headers[i], f"C{i+1}")
+                txt.set_text(generic_name)
 
                 # 2. Define a posição baseada no modo de visualização
                 if self.s_mean_view.get() and s_centroids is not None:
@@ -677,11 +725,23 @@ class VisualizationArea(ttk.Frame):
                     x, y = s_centroids[i, 0], s_centroids[i, 1]
                 else:
                     # Texto em cima do ponto do participante em destaque
-                    # (Assumindo que em modo destaque o ponto principal está no índice 'index')
                     x, y = curr_mds[0, i, 0], curr_mds[0, i, 1]
 
-                # 3. Aplica a nova posição com um pequeno offset em Y para não sobrepor o ponto
-                txt.set_position((x, y + 0.1))
+                # 3. Resolve colisões aplicando direções alternadas de offset
+                collision_count = 0
+                for px, py in placed_positions:
+                    if np.sqrt((x - px)**2 + (y - py)**2) < proximity_threshold:
+                        collision_count += 1
+                
+                offset_idx = collision_count % len(offsets)
+                dx, dy = offsets[offset_idx]
+                
+                # Escala o offset proporcionalmente ao tamanho (limites) do gráfico
+                scaled_dx = dx * (plot_range / 10.0)
+                scaled_dy = dy * (plot_range / 10.0)
+
+                txt.set_position((x + scaled_dx, y + scaled_dy))
+                placed_positions.append((x, y))
 
         for i, ellipse in enumerate(self.ellipses):
             visibility = self.concept_visibility[i].get() and self.ellipses_view.get() and s_centroids is not None and s_stds is not None

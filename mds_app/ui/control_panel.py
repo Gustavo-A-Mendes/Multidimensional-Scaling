@@ -29,6 +29,7 @@ class ControlPanel(ttk.Frame):
         
         self.phase_var: tk.StringVar | None = None
         self.phase_radiobuttons: list[ttk.Radiobutton] = []
+        self.legend_frame: ttk.LabelFrame | None = None
 
         # self.configure(width=250)
 
@@ -192,6 +193,45 @@ class ControlPanel(ttk.Frame):
                     self.visualization_area.set_index(self.filtered_indices[0])
 
         self.info_label.pack(padx=10, pady=10)
+        self.update_legend()
+
+    def update_legend(self) -> None:
+        if hasattr(self, "legend_frame") and self.legend_frame:
+            self.legend_frame.destroy()
+            self.legend_frame = None
+
+        if not self.dataset or not self.dataset.headers:
+            return
+
+        content_frame = self.scroll.content
+        self.legend_frame = ttk.LabelFrame(content_frame, text="Legenda dos Conceitos", padding=10)
+        self.legend_frame.pack(fill="x", padx=10, pady=10)
+
+        for i, h in enumerate(self.dataset.headers):
+            generic = self.dataset.concept_mapping.get(h, f"C{i+1}")
+            
+            # Container for alignment
+            row_frame = ttk.Frame(self.legend_frame)
+            row_frame.pack(anchor="w", fill="x", pady=2)
+            
+            lbl_code = ttk.Label(
+                row_frame,
+                text=f"{generic}: ",
+                font=("Segoe UI", 9, "bold"),
+                foreground="#007ACC"  # A modern accent color for the key codes
+            )
+            lbl_code.pack(side="left", anchor="nw")
+            
+            lbl_name = ttk.Label(
+                row_frame,
+                text=h,
+                font=("Segoe UI", 9),
+                wraplength=180,
+                justify="left"
+            )
+            lbl_name.pack(side="left", anchor="nw", fill="x", expand=True)
+
+        self.scroll.refresh()
 
     #
     def _enable_ctrl(self):

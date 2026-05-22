@@ -11,7 +11,7 @@ class MainWindow:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Analisador MDS Educacional")
-        self.root.geometry("900x600")
+        self.root.geometry("1080x720")
 
         self._create_layout()
 
@@ -63,7 +63,7 @@ class MainWindow:
         self.main_paned.add(self.visualization_area, minsize=100)
 
         self.root.update_idletasks()
-        self.main_paned.sash_place(0, 200, 0)
+        self.main_paned.sash_place(0, 300, 0)
         # self.main_paned.configure(sashwidth=20)
 
         self.toolbar.pack(side="top", fill="x")

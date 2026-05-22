@@ -31,6 +31,7 @@ def exportar_tudo_para_zip(zip_path, data, ui_config, filtered_indices=None, pro
     total_participant = professores + alunos
 
     headers = data.headers
+    generic_headers = [data.concept_mapping.get(h, h) for h in headers]
 
     phases_to_export = []
     if ui_config.var_phase_pre.get(): phases_to_export.append("pre")
@@ -73,6 +74,13 @@ def exportar_tudo_para_zip(zip_path, data, ui_config, filtered_indices=None, pro
                 output = io.BytesIO()
 
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    # Folha de Legenda como a primeira aba
+                    df_legenda = pd.DataFrame([
+                        {"Sigla": data.concept_mapping.get(h, f"C{i+1}"), "Conceito": h}
+                        for i, h in enumerate(headers)
+                    ])
+                    df_legenda.to_excel(writer, sheet_name="Legenda", index=False)
+
                     info = pd.DataFrame([
                         {
                             "id": p.pid,
@@ -85,11 +93,11 @@ def exportar_tudo_para_zip(zip_path, data, ui_config, filtered_indices=None, pro
                     info.to_excel(writer, sheet_name="Participantes")
 
                     if professores_mean is not None:
-                        df_media = pd.DataFrame(professores_mean, index=headers, columns=headers)
+                        df_media = pd.DataFrame(professores_mean, index=generic_headers, columns=generic_headers)
                         df_media.to_excel(writer, sheet_name="Gabarito")
 
                     if alunos_mean is not None:
-                        df_media = pd.DataFrame(alunos_mean, index=headers, columns=headers)
+                        df_media = pd.DataFrame(alunos_mean, index=generic_headers, columns=generic_headers)
                         df_media.to_excel(writer, sheet_name="Média_Turma")
 
                     for participant in total_participant:
@@ -102,7 +110,9 @@ def exportar_tudo_para_zip(zip_path, data, ui_config, filtered_indices=None, pro
                                 nome = f"Prof_{participant.pid:02}_{phase}"[:31]
                             else:
                                 nome =  f"Aluno_{participant.pid:02}_{phase}"[:31]
-                            df.to_excel(writer, sheet_name=nome)
+                            df_copy = df.copy()
+                            df_copy.rename(index=data.concept_mapping, columns=data.concept_mapping, inplace=True)
+                            df_copy.to_excel(writer, sheet_name=nome)
 
                 zf.writestr(f"{phase_name}/matrizes_dissimilaridade_{phase}.xlsx", output.getvalue())
                 current_step += 1
@@ -115,13 +125,19 @@ def exportar_tudo_para_zip(zip_path, data, ui_config, filtered_indices=None, pro
 
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    # Folha de Legenda como a primeira aba
+                    df_legenda = pd.DataFrame([
+                        {"Sigla": data.concept_mapping.get(h, f"C{i+1}"), "Conceito": h}
+                        for i, h in enumerate(headers)
+                    ])
+                    df_legenda.to_excel(writer, sheet_name="Legenda", index=False)
 
                     if professores_centroid is not None:
-                        df_media = pd.DataFrame(professores_centroid, index=headers, columns=['X', 'Y'])
+                        df_media = pd.DataFrame(professores_centroid, index=generic_headers, columns=['X', 'Y'])
                         df_media.to_excel(writer, sheet_name="Gabarito")
 
                     if alunos_centroid is not None:
-                        df_media = pd.DataFrame(alunos_centroid, index=headers, columns=['X', 'Y'])
+                        df_media = pd.DataFrame(alunos_centroid, index=generic_headers, columns=['X', 'Y'])
                         df_media.to_excel(writer, sheet_name="Média_Turma")
 
                     for participant in total_participant:
@@ -130,7 +146,7 @@ def exportar_tudo_para_zip(zip_path, data, ui_config, filtered_indices=None, pro
                             mds_res = participant.mds_result_pre
                             
                         if mds_res is not None and mds_res.X_aligned is not None:
-                            df = pd.DataFrame(mds_res.X_aligned, index=headers, columns=['X', 'Y'])
+                            df = pd.DataFrame(mds_res.X_aligned, index=generic_headers, columns=['X', 'Y'])
                             if participant.group.upper() == "PROFESSOR":
                                 nome = f"Prof_{participant.pid:02}_{phase}"[:31]
                             else:
@@ -182,18 +198,46 @@ def gerar_imagem_mds(aluno, data, phase, headers, limite, ui_config):
     # 1. Plotar os pontos do aluno
     ax.scatter(aluno_mds[:, 0], aluno_mds[:, 1], c=colors, marker='o', label='Aluno', zorder=3)
 
+    plot_range = limite[1] - limite[0]
+    proximity_threshold = 0.06 * plot_range
+    placed_positions = []
+    offsets = [
+        (0.0, 0.12),    # Acima
+        (0.0, -0.22),   # Abaixo
+        (0.18, -0.05),  # Direita
+        (-0.18, -0.05), # Esquerda
+        (0.13, 0.13),   # Superior Direito
+        (-0.13, -0.18), # Inferior Esquerdo
+        (0.13, -0.18),  # Inferior Direito
+        (-0.13, 0.13)   # Superior Esquerdo
+    ]
+
     for i in range(num_concepts):
+        generic_name = data.concept_mapping.get(headers[i], f"C{i+1}")
+        x, y = aluno_mds[i, 0], aluno_mds[i, 1]
+        
+        collision_count = 0
+        for px, py in placed_positions:
+            if np.sqrt((x - px)**2 + (y - py)**2) < proximity_threshold:
+                collision_count += 1
+                
+        offset_idx = collision_count % len(offsets)
+        dx, dy = offsets[offset_idx]
+        scaled_dx = dx * (plot_range / 10.0)
+        scaled_dy = dy * (plot_range / 10.0)
+        
         ax.text(
-            aluno_mds[i, 0],
-            aluno_mds[i, 1] + 0.10,
-            headers[i],
+            x + scaled_dx,
+            y + scaled_dy,
+            generic_name,
             fontsize=9,
             fontweight='bold',
             color=colors[i],
             ha='center',
-            va='bottom',
+            va='center',
             zorder=4
         )
+        placed_positions.append((x, y))
 
     if ui_config.var_gabarito_indiv.get() and professor_data is not None:
         ax.scatter(professor_data[:, 0], professor_data[:, 1], c=colors, marker='x', label='Gabarito')
@@ -254,18 +298,46 @@ def gerar_imagem_media(data, phase, limite, ui_config, filtered_indices=None):
 
     # 1. Plotar Médias
     ax.scatter(alunos_centroid[:, 0], alunos_centroid[:, 1], c=colors, marker='o', label='Média Turma')
+    plot_range = limite[1] - limite[0]
+    proximity_threshold = 0.06 * plot_range
+    placed_positions = []
+    offsets = [
+        (0.0, 0.12),    # Acima
+        (0.0, -0.22),   # Abaixo
+        (0.18, -0.05),  # Direita
+        (-0.18, -0.05), # Esquerda
+        (0.13, 0.13),   # Superior Direito
+        (-0.13, -0.18), # Inferior Esquerdo
+        (0.13, -0.18),  # Inferior Direito
+        (-0.13, 0.13)   # Superior Esquerdo
+    ]
+
     for i in range(num_concepts):
+        generic_name = data.concept_mapping.get(headers[i], f"C{i+1}")
+        x, y = alunos_centroid[i, 0], alunos_centroid[i, 1]
+        
+        collision_count = 0
+        for px, py in placed_positions:
+            if np.sqrt((x - px)**2 + (y - py)**2) < proximity_threshold:
+                collision_count += 1
+                
+        offset_idx = collision_count % len(offsets)
+        dx, dy = offsets[offset_idx]
+        scaled_dx = dx * (plot_range / 10.0)
+        scaled_dy = dy * (plot_range / 10.0)
+        
         ax.text(
-            alunos_centroid[i, 0],
-            alunos_centroid[i, 1] + 0.10,
-            headers[i],
+            x + scaled_dx,
+            y + scaled_dy,
+            generic_name,
             fontsize=9,
             fontweight='bold',
             color=colors[i],
             ha='center',
-            va='bottom',
+            va='center',
             zorder=4
         )
+        placed_positions.append((x, y))
 
     if "dispersão" in str(opcao).lower() or opcao in ["3.2.2", "3.2.3", "3.2.5", "3.2.6"]:
         if alunos:

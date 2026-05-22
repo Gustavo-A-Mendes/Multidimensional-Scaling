@@ -35,6 +35,7 @@ class Dataset:
         self.headers: list[str] | None                              = None
         self.selected_participants: list[Participant] | None        = None
         self.selected_headers: list[str] | None                     = None
+        self.concept_mapping: dict[str, str]                        = {}
 
         # self.centroids: Matrix | None   = None
         # self.stds: Matrix | None        = None
@@ -130,6 +131,7 @@ class Dataset:
     #
     def set_headers(self, headers: list[str]) -> None:
         self.headers = list(headers)
+        self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
 
     #
     def set_selected_headers(self, headers: list[str]) -> None:
@@ -144,6 +146,7 @@ class Dataset:
             return False
 
         self.headers.append(header)
+        self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
 
         for p in self.participants["professors"] + self.participants["students"]:
             if p.dataframe_pre is not None:
@@ -172,6 +175,7 @@ class Dataset:
             return False
 
         self.headers.remove(header)
+        self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
 
         for p in self.participants["professors"] + self.participants["students"]:
             if p.dataframe_pre is not None and header in p.dataframe_pre.columns:
@@ -187,6 +191,16 @@ class Dataset:
         """
         Alinha 'target' a 'ref' sem alterar a escala (apenas rotação e translação).
         """
+        if ref is None or target is None:
+            raise ValueError("As matrizes para Procrustes não podem ser nulas.")
+            
+        if ref.shape != target.shape:
+            raise ValueError(
+                f"As matrizes de coordenadas possuem dimensões diferentes para alinhamento: "
+                f"Referência {ref.shape} vs Alvo {target.shape}. Certifique-se de que todos os "
+                f"participantes tenham respondido os mesmos conceitos e itens."
+            )
+            
         # 1. Centralizar as matrizes na origem
         mu_ref = ref.mean(axis=0)
         mu_target = target.mean(axis=0)
@@ -330,11 +344,15 @@ class Dataset:
             return (-1.0, 1.0)
             
         all_coords = np.vstack(all_coords)
+        if np.all(np.isnan(all_coords)):
+            return (-1.0, 1.0)
 
         # Encontra o valor absoluto máximo para criar um gráfico centralizado e simétrico
-        # Adicionamos uma margem de 10% (buffer) para os pontos não ficarem colados na borda
-        margem = 1.1
-        max_val = np.max((all_coords)) * margem
-        min_val = np.min((all_coords)) * margem
-
-        return (min_val, max_val)
+        # Adicionamos uma margem de 15% (buffer) para os pontos não ficarem colados na borda
+        margem = 1.15
+        max_abs = np.nanmax(np.abs(all_coords))
+        if max_abs == 0 or np.isnan(max_abs):
+            return (-1.0, 1.0)
+            
+        limit_val = max_abs * margem
+        return (-limit_val, limit_val)

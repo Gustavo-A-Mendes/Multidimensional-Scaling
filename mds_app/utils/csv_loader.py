@@ -171,12 +171,25 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
                     column = col.split("-")[1].strip()
                     a, b = [x.strip() for x in column.split(" e ")]
                     valor = df.loc[idx, col]
-                    mat.at[a, b] = int(11-valor)
-                    mat.at[b, a] = int(11-valor)
+                    try:
+                        if pd.isna(valor):
+                            val_numeric = np.nan
+                        else:
+                            val_numeric = float(valor)
+                        
+                        if np.isnan(val_numeric):
+                            mat.at[a, b] = np.nan
+                            mat.at[b, a] = np.nan
+                        else:
+                            mat.at[a, b] = 11.0 - val_numeric
+                            mat.at[b, a] = 11.0 - val_numeric
+                    except (ValueError, TypeError):
+                        mat.at[a, b] = np.nan
+                        mat.at[b, a] = np.nan
 
                 # matrices.append(mat)
                 if mat.empty:
-                    return None
+                    return [], []
 
                 # building participant info:
                 num_participants = len(participants_dict)
