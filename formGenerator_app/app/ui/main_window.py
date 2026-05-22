@@ -7,7 +7,7 @@ import ttkbootstrap as ttk
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 
-from formGenerator_app.app.services.auth_service import authenticate, try_auto_login, get_user_info
+from formGenerator_app.app.services.auth_service import authenticate, try_auto_login, get_user_info, logout_service
 from formGenerator_app.app.services.forms_service import create_forms
 from formGenerator_app.app.services.clipboard_service import copy
 
@@ -69,6 +69,13 @@ class MainWindow:
             command=self.start_login
         )
         self.btn_login.pack()
+
+        self.btn_logout = ttk.Button(
+            self.auth_widget,
+            text="Desconectar / Trocar de Conta",
+            bootstyle="danger-outline",
+            command=self.logout_account
+        )
 
         # Aba 2: Configuração
         self.tab2 = ttk.Frame(self.notebook, padding=20)
@@ -143,7 +150,7 @@ class MainWindow:
             self.creds = authenticate()
             user = get_user_info(self.creds)
 
-            self.window.after(0, lambda: self._on_login_success(user["name"]))
+            self.window.after(0, lambda: self._on_login_success(user, is_manual=True))
         except Exception as e:
             self.window.after(0, lambda: messagebox.showerror("Erro", str(e)))
             self.window.after(0, lambda: self.btn_login.config(state="normal", text="Fazer Login com Google"))
@@ -158,16 +165,49 @@ class MainWindow:
         if creds:
             self.creds = creds
             user = get_user_info(creds)
-            self._on_login_success(user["name"])
+            self._on_login_success(user)
 
-    def _on_login_success(self, user_name):
+    def _on_login_success(self, user, is_manual=False):
+        user_name = user.get("name", "Usuário")
+        user_email = user.get("email", "")
+        email_str = f" ({user_email})" if user_email else ""
+
         self.status_label.config(
             text=f"Conectado como: {user_name}",
             bootstyle="success"
         )
-        self.btn_login.config(state="disabled", text="Autenticado")
+        
+        # Oculta o botão de login e exibe o botão de logout
+        self.btn_login.pack_forget()
+        self.btn_logout.pack()
+        
         self.notebook.tab(self.tab2, state="normal")
         self.notebook.select(self.tab2)
+
+        if is_manual:
+            messagebox.showinfo("Login com Sucesso", f"Bem-vindo, {user_name}!\nLogin realizado com sucesso.")
+
+    def logout_account(self):
+        if messagebox.askyesno("Confirmar Logout", "Deseja realmente desconectar sua conta do Google?"):
+            try:
+                logout_service()
+
+                self.creds = None
+                self.status_label.config(
+                    text="Status: Conta não conectada",
+                    bootstyle="danger"
+                )
+                self.btn_login.config(state="normal", text="Fazer Login com Google")
+                self.btn_login.pack()
+                self.btn_logout.pack_forget()
+
+                self.notebook.tab(self.tab2, state="disabled")
+                self.notebook.tab(self.tab3, state="disabled")
+                self.notebook.select(self.tab1)
+
+                messagebox.showinfo("Logout", "Conta desconectada com sucesso!")
+            except Exception as e:
+                messagebox.showerror("Erro", f"Erro ao deslogar: {str(e)}")
 
     def generate_forms(self):
         if not self.creds:

@@ -1,4 +1,5 @@
 import os
+import sys
 from googleapiclient.discovery import build
 
 from google.oauth2.credentials import Credentials
@@ -6,26 +7,31 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 
-BASE_DIR = os.path.dirname(
-    os.path.dirname(
-        os.path.dirname(os.path.abspath(__file__))
-    )
-)
+def get_credentials_path(filename):
+    """
+    Retorna o caminho dinâmico para os arquivos de credenciais.
+    - token.json: Salvo na pasta do usuário (~/.form_generator) para persistência e permissão.
+    - client_secret.json: Lido da pasta temporária (sys._MEIPASS) se frozen, ou localmente em dev.
+    """
+    if filename == "token.json":
+        user_dir = os.path.expanduser("~/.form_generator")
+        os.makedirs(user_dir, exist_ok=True)
+        return os.path.join(user_dir, "token.json")
+    
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+        return os.path.join(base_path, "credentials", filename)
+    else:
+        base_dir = os.path.dirname(
+            os.path.dirname(
+                os.path.dirname(os.path.abspath(__file__))
+            )
+        )
+        return os.path.join(base_dir, "credentials", filename)
 
-CREDENTIALS_DIR = os.path.join(
-    BASE_DIR,
-    "credentials"
-)
 
-TOKEN_PATH = os.path.join(
-    CREDENTIALS_DIR,
-    "token.json"
-)
-
-CLIENT_SECRET_PATH = os.path.join(
-    CREDENTIALS_DIR,
-    "client_secret.json"
-)
+TOKEN_PATH = get_credentials_path("token.json")
+CLIENT_SECRET_PATH = get_credentials_path("client_secret.json")
 
 
 SCOPES = [
@@ -109,4 +115,11 @@ def get_user_info(creds):
         "name": info.get("name"),
         "email": info.get("email")
     }
+
+
+def logout_service():
+    """Remove o arquivo contendo o token de autenticação local."""
+    if os.path.exists(TOKEN_PATH):
+        os.remove(TOKEN_PATH)
+
 
