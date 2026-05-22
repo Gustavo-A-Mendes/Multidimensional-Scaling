@@ -1,6 +1,11 @@
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
-ttkbootstrap
 pyinstaller
 pyperclip
+numpy
+scipy
+pandas
+matplotlib
+ttkbootstrap
+tksheet
