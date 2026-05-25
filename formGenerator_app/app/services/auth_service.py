@@ -44,7 +44,12 @@ SCOPES = [
 ]
 
 
-def authenticate():
+_active_server = None
+_login_cancelled = False
+
+
+def authenticate(timeout_seconds=120):
+    global _active_server, _login_cancelled
 
     creds = None
 
@@ -68,12 +73,41 @@ def authenticate():
                 SCOPES
             )
 
-            creds = flow.run_local_server(port=0)
+            import wsgiref.simple_server
+            original_make_server = wsgiref.simple_server.make_server
+
+            def custom_make_server(*args, **kwargs):
+                server = original_make_server(*args, **kwargs)
+                global _active_server
+                _active_server = server
+                return server
+
+            wsgiref.simple_server.make_server = custom_make_server
+            _login_cancelled = False
+            try:
+                creds = flow.run_local_server(port=0, timeout_seconds=timeout_seconds)
+            except Exception as e:
+                if _login_cancelled:
+                    raise RuntimeError("Login cancelado pelo usuário.") from e
+                raise e
+            finally:
+                wsgiref.simple_server.make_server = original_make_server
+                _active_server = None
 
         with open(TOKEN_PATH, "w") as token:
             token.write(creds.to_json())
 
     return creds
+
+
+def cancel_login():
+    global _active_server, _login_cancelled
+    _login_cancelled = True
+    if _active_server is not None:
+        try:
+            _active_server.server_close()
+        except Exception:
+            pass
 
 
 def try_auto_login():

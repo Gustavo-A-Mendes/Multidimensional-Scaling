@@ -7,7 +7,7 @@ import ttkbootstrap as ttk
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 
-from formGenerator_app.app.services.auth_service import authenticate, try_auto_login, get_user_info, logout_service
+from formGenerator_app.app.services.auth_service import authenticate, try_auto_login, get_user_info, logout_service, cancel_login
 from formGenerator_app.app.services.forms_service import create_forms
 from formGenerator_app.app.services.clipboard_service import copy
 
@@ -47,9 +47,17 @@ class MainWindow:
         self.login_label = ttk.Label(
             self.tab1,
             text="Para gerar os formulários no seu Google Drive, é necessário conectar sua conta.",
-            font=("Arial", 12)
+            font=("Arial", 12),
+            justify="center",
+            anchor="center"
         )
-        self.login_label.pack(pady=20)
+        self.login_label.pack(pady=20, fill="x", padx=10)
+
+        # Ajusta a quebra de linha do texto dinamicamente se a janela for redimensionada
+        self.tab1.bind(
+            "<Configure>",
+            lambda event: self.login_label.configure(wraplength=event.width - 40)
+        )
 
         self.status_label = ttk.Label(
             self.tab1,
@@ -69,6 +77,13 @@ class MainWindow:
             command=self.start_login
         )
         self.btn_login.pack()
+
+        self.btn_cancel_login = ttk.Button(
+            self.auth_widget,
+            text="Cancelar Login",
+            bootstyle="secondary-outline",
+            command=self.cancel_login_action
+        )
 
         self.btn_logout = ttk.Button(
             self.auth_widget,
@@ -146,14 +161,32 @@ class MainWindow:
 
     def login(self):
         try:
-            self.window.after(0, lambda: self.btn_login.config(state="disabled", text="Conectando..."))
+            self.window.after(0, self._show_connecting_state)
             self.creds = authenticate()
             user = get_user_info(self.creds)
 
             self.window.after(0, lambda: self._on_login_success(user, is_manual=True))
         except Exception as e:
-            self.window.after(0, lambda: messagebox.showerror("Erro", str(e)))
-            self.window.after(0, lambda: self.btn_login.config(state="normal", text="Fazer Login com Google"))
+            err_msg = str(e)
+            if "cancelado pelo usuário" in err_msg:
+                self.window.after(0, lambda: messagebox.showinfo("Login Cancelado", "O processo de login foi cancelado pelo usuário."))
+            elif "Timed out" in err_msg or "Tempo limite" in err_msg or "timed out" in err_msg.lower():
+                self.window.after(0, lambda: messagebox.showwarning("Tempo Limite Atingido", "O tempo limite para o login no navegador foi atingido (2 minutos). Por favor, tente novamente."))
+            else:
+                self.window.after(0, lambda: messagebox.showerror("Erro de Login", f"Ocorreu um erro ao fazer login:\n{err_msg}"))
+            
+            self.window.after(0, self._restore_login_state)
+
+    def cancel_login_action(self):
+        cancel_login()
+
+    def _show_connecting_state(self):
+        self.btn_login.config(state="disabled", text="Conectando...")
+        self.btn_cancel_login.pack(pady=10)
+
+    def _restore_login_state(self):
+        self.btn_login.config(state="normal", text="Fazer Login com Google")
+        self.btn_cancel_login.pack_forget()
 
     def start_login(self):
         thread = threading.Thread(target=self.login)
@@ -177,8 +210,10 @@ class MainWindow:
             bootstyle="success"
         )
         
-        # Oculta o botão de login e exibe o botão de logout
+        # Oculta o aviso, botão de login e cancelamento, e exibe o botão de logout
+        self.login_label.pack_forget()
         self.btn_login.pack_forget()
+        self.btn_cancel_login.pack_forget()
         self.btn_logout.pack()
         
         self.notebook.tab(self.tab2, state="normal")
@@ -193,6 +228,7 @@ class MainWindow:
                 logout_service()
 
                 self.creds = None
+                self.login_label.pack(before=self.status_label, pady=20)
                 self.status_label.config(
                     text="Status: Conta não conectada",
                     bootstyle="danger"
