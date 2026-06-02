@@ -131,7 +131,7 @@ def _build_form(service, title, concepts):
         requests.append({
             "createItem": {
                 "item": {
-                    "title": f"{(i+1):02d}/{total} - {c1} e {c2}",
+                    "title": f"[{(i+1):02d}/{total}] {c1} - {c2}",
                     "description": f"Qual é o grau de relacionamento entre os conceitos de {c1} e {c2}? "
                                    f"\n(Quanto menor, mais próximos)",
                     "questionItem": {
