@@ -27,11 +27,10 @@ def _build_form(service, title, concepts):
     requests.append({
         "updateFormInfo":{
             "info": {
-                "description": f"Classifique numa escala de 1 a 10 as distância dos conceitos físicos apresentados:"
+                "description": f"O formulário conterá um certo número de pares de conceitos.\n"
+                               f"\nEm cada par existe uma escala numérica que vai de 1 a 9. Nessa escala, 1 corresponde a um alto grau de relacionamento entre os conceitos (por exemplo, temperatura e calor, massa e energia) e 9 corresponde a praticamente nenhuma relação (por exemplo, volume e velocidade).\n"
+                               f"\nSe você achar que os conceitos de um determinado par são muito relacionados coloque um X na coluna 1 da escala. Por outro lado, se na sua opinião um conceito do par não tem nada a ver com o outro, coloque o X na coluna 9. Estas são as duas situações extremas. Os números entre 1 e 9 refletem situações intermediárias: quanto mais perto de 1 você colocar o X, maior é o relacionamento que você vê entre os conceitos, e quanto mais perto de 9, menor esse relacionamento.\n"
                                f"\n"
-                               f"\n1 = Conceitos distantes / totalmente diferentes"
-                               f"\n10 = Conceitos próximos / fortemente relacionados"
-                               f"\n\n"
                                f"\nOs conceitos analisados serão:"
                                f"\n{str_list_concepts}",
             },
@@ -133,16 +132,18 @@ def _build_form(service, title, concepts):
             "createItem": {
                 "item": {
                     "title": f"{(i+1):02d}/{total} - {c1} e {c2}",
-                    "description": f"Qual a relação de entre os conceitos de {c1} e {c2}? "
-                                   f"\n(Quanto maior, mais próximo)",
+                    "description": f"Qual é o grau de relacionamento entre os conceitos de {c1} e {c2}? "
+                                   f"\n(Quanto menor, mais próximos)",
                     "questionItem": {
                         "question": {
                             "required": True,
                             "scaleQuestion": {
                                 "low": 1,
-                                "high": 10,
-                                "lowLabel": "Fraca",
-                                "highLabel": "Forte"
+                                "high": 9,
+                                "lowLabel": "Fortemente\n"
+                                            "Relacionado",
+                                "highLabel": "Fracamente\n"
+                                             "Relacionado"
                             }
                         }
                     }
