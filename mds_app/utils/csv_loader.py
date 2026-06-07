@@ -54,35 +54,6 @@ def export_csv(filename: str, dataset: Dataset) -> None:
 
     df_csv.to_csv(f"{filename}.csv", index=False)
 
-def export_excel(filename: str, dataset: Dataset) -> None:
-    p_participants = dataset.participants["professors"]
-    s_participants = dataset.participants["students"]
-    participants = p_participants + s_participants
-
-    # create info dataframe:
-    info = pd.DataFrame([
-        {
-            "id": p.pid,
-            "Nome": p.name,
-            "Grupo": p.group,
-            "Nivel": p.familiarity_level
-        }
-        for p in participants
-    ])
-
-    # exportar para um arquivo Excel:
-    with pd.ExcelWriter(f"{filename}.xlsx") as writer:
-
-        # info sheet:
-        info.to_excel(writer, sheet_name="Participantes", index=False)
-
-        # data sheets:
-        for participant in participants:
-            df = participant.dataframe
-            sheet_name = f"Resposta_{participant.pid:02}"
-
-            df.to_excel(writer, sheet_name=sheet_name)
-
 # return a list with headers of dataframe (used to filter the forms headers):
 def get_header(df: pd.DataFrame) -> list[str]:
     keywords = []
@@ -90,15 +61,14 @@ def get_header(df: pd.DataFrame) -> list[str]:
     for col in df.columns:
         # continuando...
 
-        if "-" not in col:
+        trecho = col.split("]")[1].strip() if "]" in col else col
+
+        # trecho = col.split("-")[1].strip()
+
+        if " - " not in trecho:
             continue
 
-        trecho = col.split("-")[1].strip()
-
-        if " e " not in trecho:
-            continue
-
-        a, b = [x.strip() for x in trecho.split(" e ")]
+        a, b = [x.strip() for x in trecho.split(" - ")]
         if a not in keywords:
             keywords.append(a)
         if b not in keywords:
@@ -128,7 +98,7 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
             for col in df.columns:
 
                 # getting personal data from df:
-                if "nome" in col.lower():
+                if "identificação" in col.lower():
                     names_temp = df[col].tolist()
 
                 if "grupo" in col.lower():
@@ -140,15 +110,14 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
                 # proceeding...
 
                 # filtering the keyword of columns headers (and listing the data_columns):
-                if "-" not in col:
+                column = col.split("]")[1].strip() if "]" in col else col
+
+                # column = col.split("-")[1].strip()
+
+                if " - " not in column:
                     continue
 
-                column = col.split("-")[1].strip()
-
-                if " e " not in column:
-                    continue
-
-                a, b = [x.strip() for x in column.split(" e ")]
+                a, b = [x.strip() for x in column.split(" - ")]
 
                 if a not in keywords:
                     keywords.append(a)
@@ -168,8 +137,9 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
                 mat = pd.DataFrame(0, index=keywords, columns=keywords, dtype=float)
 
                 for col in data_columns:
-                    column = col.split("-")[1].strip()
-                    a, b = [x.strip() for x in column.split(" e ")]
+                    column = col.split("]")[1].strip() if "]" in col else col
+
+                    a, b = [x.strip() for x in column.split(" - ")]
                     valor = df.loc[idx, col]
                     try:
                         if pd.isna(valor):
@@ -181,8 +151,8 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
                             mat.at[a, b] = np.nan
                             mat.at[b, a] = np.nan
                         else:
-                            mat.at[a, b] = 11.0 - val_numeric
-                            mat.at[b, a] = 11.0 - val_numeric
+                            mat.at[a, b] = val_numeric
+                            mat.at[b, a] = val_numeric
                     except (ValueError, TypeError):
                         mat.at[a, b] = np.nan
                         mat.at[b, a] = np.nan

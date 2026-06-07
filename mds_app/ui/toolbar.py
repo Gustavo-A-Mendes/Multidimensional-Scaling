@@ -80,8 +80,8 @@ class ToolBar(ttk.Frame):
 
         file_path = Path(filedialog.askopenfilename(
             filetypes=[
-                ("Todos os arquivos", "*.*"),
-                ("Arquivos CSV", "*.csv")
+                ("Arquivos CSV", "*.csv"),
+                ("Todos os arquivos", "*.*")
             ]
         ))
         # import canceled
@@ -98,7 +98,6 @@ class ToolBar(ttk.Frame):
 
             # detects file type:
             file_type = detect_file_type(df, ext)
-
             participants_data, headers = separate_df(df, file_type, ext)
 
             unk_group = any(p.group == ' - ' for p in participants_data)

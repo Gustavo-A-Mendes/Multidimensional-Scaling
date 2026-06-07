@@ -31,9 +31,6 @@ def detect_file_type(df, file_ext):
     '''
     if file_ext == ".csv":
         df_temp = df.copy()
-    elif file_ext == ".xlsx" or file_ext == ".xls":
-        # df is a dict. Checks the first data:
-        df_temp = list(df.values())[0].copy()
     else:
         return None
 
@@ -70,7 +67,8 @@ def has_metadata_cols(df):
     for col in df.columns:
         series = df[col]
 
-        if series.dtype == "object":
+        # Verifica de forma segura se a coluna é object (versões antigas) ou string/str (versões novas):
+        if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
             # if series.nunique() > 1:
             return True
 
