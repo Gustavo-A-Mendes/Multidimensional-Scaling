@@ -148,11 +148,16 @@ class Dataset:
         self.headers.append(header)
         self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
 
-        for p in self.participants["professors"] + self.participants["students"]:
-            if p.dataframe_pre is not None:
-                p.dataframe_pre[header] = "-"
-            if p.dataframe_pos is not None:
-                p.dataframe_pos[header] = "-"
+        for group_key in ["professors", "students"]:
+            if self.participants and group_key in self.participants:
+                for p in self.participants[group_key]:
+                    for phase in ["pre", "pos"]:
+                        df = getattr(p, f"dataframe_{phase}")
+                        if df is not None:
+                            df[header] = np.nan
+                            df.loc[header] = np.nan
+                            df.at[header, header] = 0.0
+                            getattr(p, f"mds_result_{phase}").fit(df)
 
         return True
 
@@ -160,30 +165,85 @@ class Dataset:
     def can_remove_header(self, header: str) -> bool:
         if not self.headers_match(header):
             return False
+        
+        # Se for no modo de matriz única (apenas 1 estudante), sempre podemos remover
+        if self.participants and len(self.participants.get("students", [])) == 1 and not self.participants.get("professors"):
+            return True
 
-        for p in self.participants["professors"] + self.participants["students"]:
-            if p.dataframe_pre is not None and not p.dataframe_pre[header].eq("-").all():
-                return False
-            if p.dataframe_pos is not None and not p.dataframe_pos[header].eq("-").all():
-                return False
+        for group_key in ["professors", "students"]:
+            if self.participants and group_key in self.participants:
+                for p in self.participants[group_key]:
+                    if p.dataframe_pre is not None and header in p.dataframe_pre.columns:
+                        if not p.dataframe_pre[header].isna().all() and not p.dataframe_pre[header].eq("-").all():
+                            return False
+                    if p.dataframe_pos is not None and header in p.dataframe_pos.columns:
+                        if not p.dataframe_pos[header].isna().all() and not p.dataframe_pos[header].eq("-").all():
+                            return False
 
         return True
 
     #
     def remove_header(self, header: str) -> bool:
-        if not self.can_remove_header(header):
+        if header not in self.headers:
             return False
 
         self.headers.remove(header)
         self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
 
-        for p in self.participants["professors"] + self.participants["students"]:
-            if p.dataframe_pre is not None and header in p.dataframe_pre.columns:
-                p.dataframe_pre.drop(columns=[header], inplace=True)
-            if p.dataframe_pos is not None and header in p.dataframe_pos.columns:
-                p.dataframe_pos.drop(columns=[header], inplace=True)
+        for group_key in ["professors", "students"]:
+            if self.participants and group_key in self.participants:
+                for p in self.participants[group_key]:
+                    for phase in ["pre", "pos"]:
+                        df = getattr(p, f"dataframe_{phase}")
+                        if df is not None:
+                            if header in df.columns:
+                                df.drop(columns=[header], inplace=True)
+                            if header in df.index:
+                                df.drop(index=[header], inplace=True)
+                            getattr(p, f"mds_result_{phase}").fit(df)
 
         return True
+
+    def rename_header(self, old_name: str, new_name: str) -> bool:
+        if old_name not in self.headers or new_name in self.headers:
+            return False
+
+        idx = self.headers.index(old_name)
+        self.headers[idx] = new_name
+        self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
+
+        for group_key in ["professors", "students"]:
+            if self.participants and group_key in self.participants:
+                for p in self.participants[group_key]:
+                    for phase in ["pre", "pos"]:
+                        df = getattr(p, f"dataframe_{phase}")
+                        if df is not None:
+                            df.rename(columns={old_name: new_name}, index={old_name: new_name}, inplace=True)
+                            getattr(p, f"mds_result_{phase}").fit(df)
+        return True
+
+    def update_all_headers(self, new_headers: list[str]) -> None:
+        # Se os comprimentos forem iguais, assume renomeação sequencial para preservar dados
+        if self.headers and len(new_headers) == len(self.headers):
+            old_headers = list(self.headers)
+            for old_h, new_h in zip(old_headers, new_headers):
+                if old_h != new_h:
+                    self.rename_header(old_h, new_h)
+        else:
+            self.headers = list(new_headers)
+            self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
+            
+            for group_key in ["professors", "students"]:
+                if self.participants and group_key in self.participants:
+                    for p in self.participants[group_key]:
+                        for phase in ["pre", "pos"]:
+                            df = getattr(p, f"dataframe_{phase}")
+                            if df is not None:
+                                new_df = df.reindex(index=new_headers, columns=new_headers)
+                                for h in new_headers:
+                                    new_df.at[h, h] = 0.0
+                                setattr(p, f"dataframe_{phase}", new_df)
+                                getattr(p, f"mds_result_{phase}").fit(new_df)
 
     #
     @staticmethod

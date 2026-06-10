@@ -23,7 +23,7 @@ from mds_app.utils.validators import *
 Matrix = npt.NDArray[np.float64]
 
 class VisualizationArea(ttk.Frame):
-    def __init__(self, parent, dataset) -> None:
+    def __init__(self, parent, dataset, mode: str = "group") -> None:
         super().__init__(parent)
 
         self.dataset: Dataset = dataset
@@ -66,6 +66,7 @@ class VisualizationArea(ttk.Frame):
             self.ellipse_view_values,
             self.evo_view_values
         ]
+        self.dataset_mode = mode
 
         self._create_widgets()
 
@@ -150,26 +151,19 @@ class VisualizationArea(ttk.Frame):
             show_top_left = True
         )
         self.sheet.enable_bindings(
-            # "all"
-            "single_select",    # simple select
-            "row_select",               # enable row selection
-            "column_select",            # enable column selection
+            "single_select",
+            "row_select",
+            "column_select",
             "drag_select",
             "arrowkeys",
             "row_height_resize",
-            # "row_width_  resize",
             "column_width_resize",
-            # "column_height_resize",
             "double_click_column_resize",
             "double_click_row_resize",
-            # "right_click_popup_menu",
             "rc_select",
-            # "rc_insert_row",
-            # "rc_delete_row",
-            # "copy",
-            # "paste",
-            # "delete"
+            "edit_cell"
         )
+        self.sheet.extra_bindings([("end_edit_cell", self.on_cell_edited), ("select_cell", self.on_select_cell)])
 
         # -----
         ctrl_frame = self.data_ctrl.content
@@ -321,12 +315,12 @@ class VisualizationArea(ttk.Frame):
         ttk.Separator(ctrl_frame).pack(fill="x", padx=10, pady=10)
 
         # --- Ranking ---
-        ranking_frame = ttk.LabelFrame(ctrl_frame, text="Filtro de Ranking", padding=5)
-        ranking_frame.pack(fill="x", padx=10, pady=5)
+        self.ranking_frame = ttk.LabelFrame(ctrl_frame, text="Filtro de Ranking", padding=5)
+        self.ranking_frame.pack(fill="x", padx=10, pady=5)
         
         self.ranking_mode_var = tk.StringVar(value="Todos os Alunos")
         self.ranking_combo = ttk.Combobox(
-            ranking_frame, 
+            self.ranking_frame, 
             textvariable=self.ranking_mode_var,
             values=["Todos os Alunos", "Top Alinhados", "Top Divergentes", "Top Evolução"],
             state="readonly"
@@ -334,7 +328,7 @@ class VisualizationArea(ttk.Frame):
         self.ranking_combo.pack(fill="x", pady=2)
         self.ranking_combo.bind("<<ComboboxSelected>>", lambda e: self.atualizar_estado_ranking())
         
-        spin_frame = ttk.Frame(ranking_frame)
+        spin_frame = ttk.Frame(self.ranking_frame)
         spin_frame.pack(fill="x", pady=2)
         self.quantidade_label = ttk.Label(spin_frame, text="Quantidade (N):")
         self.quantidade_label.pack(side="left")
@@ -454,27 +448,44 @@ class VisualizationArea(ttk.Frame):
         self.evo_lines = LineCollection([], colors='green', linewidths=1.5, linestyles='-', alpha=0.6,
                                                zorder=1)
         self.ax.add_collection(self.evo_lines)
+        self.set_mode(self.dataset_mode)
 
     #
     def refresh(self):
-        index = self.id
-        dataset = self.dataset
-        header = dataset.headers
+        if not self.notebook:
+            return
 
-        self.show_matrix(header)
-
-        self.atualizar_estado_ranking()
-        self.show_mds()
+        header = self.dataset.headers if self.dataset else None
+        has_students = self.dataset.participants and len(self.dataset.participants.get("students", [])) > 0 if self.dataset else False
+        
+        if header and has_students:
+            self.show_matrix(header)
+            if hasattr(self, "ranking_combo") and self.ranking_combo:
+                self.atualizar_estado_ranking()
+                self.show_mds()
+        else:
+            # Limpar e esquecer abas que não sejam "Início"
+            tabs = self.notebook.tabs()
+            for tab in tabs:
+                if self.notebook.tab(tab, "text") not in ("Início"):
+                    self.notebook.forget(tab)
+            # Selecionar aba Início
+            self.notebook.select(0)
 
     #
     def show_matrix(self, headers: list[str]) -> None:
         highlight = self.highlight_values.get()
 
-        if not self.dataset:
+        if not self.dataset or not self.dataset.participants:
+            if self.sheet:
+                self.sheet.set_sheet_data([])
+                self.sheet.headers([])
+                self.sheet.row_index([])
+                self.sheet.refresh()
             return
 
-        p_participants = self.dataset.participants["professors"]
-        s_participants = self.dataset.participants["students"]
+        p_participants = self.dataset.participants.get("professors", [])
+        s_participants = self.dataset.participants.get("students", [])
         participants = p_participants + s_participants
         
         if self.id is None or self.id < 0 or not s_participants or self.id >= len(s_participants):
@@ -523,19 +534,27 @@ class VisualizationArea(ttk.Frame):
         # clear style:
         self.sheet.dehighlight_all()
 
-        for r in range(len(dados)):
-            for c in range(len(dados[r])):
-                if not highlight:   # default style
-                    cor = "#f0f0f0" if r % 2 == 0 else "#ffffff"
-                else:               # highlight style
-                    cor = self.value_to_color(df, r, c)
+        readonly_list = []
+        num = len(dados)
+        for r in range(num):
+            for c in range(num):
+                if r <= c:
+                    readonly_list.append((r, c))
+                    bg_color = "#e0e0e0" if r == c else "#f2f2f2"
+                    fg_color = "#808080"
+                    self.sheet.highlight_cells(row=r, column=c, bg=bg_color, fg=fg_color)
+                else:
+                    if not highlight:   # default style
+                        cor = "#f0f0f0" if r % 2 == 0 else "#ffffff"
+                    else:               # highlight style
+                        cor = self.value_to_color(df, r, c)
+                    self.sheet.highlight_cells(row=r, column=c, bg=cor, fg="black")
 
-                self.sheet.highlight_cells(
-                    row=r,
-                    column=c,
-                    bg=cor,
-                    fg="black",
-                )
+        try:
+            # Tentar limpar qualquer marcação de readonly anterior e definir as novas
+            self.sheet.readonly_cells(cells=readonly_list)
+        except Exception as e:
+            print(f"tksheet readonly_cells fallback: {e}")
 
         # -----------------------------
         # adjusting appearance:
@@ -893,6 +912,13 @@ class VisualizationArea(ttk.Frame):
             sorted_indices = np.argsort(distances)[::-1]
             return sorted_indices[:n].tolist()
 
+    def get_all_participants(self) -> list:
+        if not self.dataset or not self.dataset.participants:
+            return []
+        p_list = self.dataset.participants.get("professors", [])
+        s_list = self.dataset.participants.get("students", [])
+        return (p_list or []) + (s_list or [])
+
     # calls highlight method of visualization area:
     def _hightlight_values(self) -> None:
         idx = self.id
@@ -900,8 +926,10 @@ class VisualizationArea(ttk.Frame):
             return
 
         headers = self.dataset.selected_headers
+        participants = self.get_all_participants()
+        if not participants or idx >= len(participants):
+            return
 
-        participants = self.dataset.participants["professors"] + self.dataset.participants["students"]
         self.selected_participant = participants[idx]
         self.show_matrix(headers)
         self.show_mds()
@@ -913,8 +941,10 @@ class VisualizationArea(ttk.Frame):
             return
 
         headers = self.dataset.selected_headers
+        participants = self.get_all_participants()
+        if not participants or idx >= len(participants):
+            return
 
-        participants = self.dataset.participants["professors"] + self.dataset.participants["students"]
         self.selected_participant = participants[idx]
         self.show_matrix(headers)
         self.show_mds()
@@ -925,7 +955,10 @@ class VisualizationArea(ttk.Frame):
         if idx is None:
             return
 
-        participants = self.dataset.participants["professors"] + self.dataset.participants["students"]
+        participants = self.get_all_participants()
+        if not participants or idx >= len(participants):
+            return
+
         self.selected_participant = participants[idx]
         self.show_mds()
 
@@ -935,7 +968,10 @@ class VisualizationArea(ttk.Frame):
         if idx is None:
             return
 
-        participants = self.dataset.participants["professors"] + self.dataset.participants["students"]
+        participants = self.get_all_participants()
+        if not participants or idx >= len(participants):
+            return
+
         self.selected_participant = participants[idx]
         self.show_mds()
 
@@ -945,7 +981,10 @@ class VisualizationArea(ttk.Frame):
         if idx is None:
             return
 
-        participants = self.dataset.participants["professors"] + self.dataset.participants["students"]
+        participants = self.get_all_participants()
+        if not participants or idx >= len(participants):
+            return
+
         self.selected_participant = participants[idx]
         self.show_mds()
 
@@ -955,12 +994,16 @@ class VisualizationArea(ttk.Frame):
         if idx is None:
             return
 
-        participants = self.dataset.participants["professors"] + self.dataset.participants["students"]
+        participants = self.get_all_participants()
+        if not participants or idx >= len(participants):
+            return
+
         self.selected_participant = participants[idx]
         self.show_mds()
 
-    #
     def atualizar_estado_ranking(self):
+        if not hasattr(self, "ranking_spin") or not self.ranking_spin:
+            return
         # Verifica o valor selecionado no Combobox
         if self.ranking_mode_var.get() == "Todos os Alunos":
             # Desabilita o Spinbox e muda a cor do Label para parecer desativado
@@ -1044,3 +1087,184 @@ class VisualizationArea(ttk.Frame):
             visibility.set(self.all_selection_values.get())
 
         self.refresh()
+
+    def set_mode(self, mode: str) -> None:
+        self.dataset_mode = mode
+        
+        # Ocultar ou mostrar o painel de controle lateral do MDS e os botões
+        if mode == "group":
+            if hasattr(self, "mds_view") and self.mds_view and hasattr(self, "mds_ctrl") and self.mds_ctrl:
+                if self.mds_ctrl not in self.mds_view.panes():
+                    self.mds_view.add(self.mds_ctrl, minsize=100, stretch="never")
+            
+            if hasattr(self, "mean_view_checkbox") and self.mean_view_checkbox:
+                self.mean_view_checkbox.pack(fill="x", padx=10)
+            if hasattr(self, "dispersion_view_checkbox") and self.dispersion_view_checkbox:
+                self.dispersion_view_checkbox.pack(fill="x", padx=10)
+            if hasattr(self, "ellipse_view_checkbox") and self.ellipse_view_checkbox:
+                self.ellipse_view_checkbox.pack(fill="x", padx=10)
+            if hasattr(self, "evo_view_checkbox") and self.evo_view_checkbox:
+                self.evo_view_checkbox.pack(fill="x", padx=10)
+            if hasattr(self, "ranking_frame") and self.ranking_frame:
+                self.ranking_frame.pack(fill="x", padx=10, pady=5)
+        else:
+            if hasattr(self, "mds_view") and self.mds_view and hasattr(self, "mds_ctrl") and self.mds_ctrl:
+                if self.mds_ctrl in self.mds_view.panes():
+                    self.mds_view.forget(self.mds_ctrl)
+
+            if hasattr(self, "mean_view_checkbox") and self.mean_view_checkbox:
+                self.mean_view_checkbox.pack_forget()
+            if hasattr(self, "dispersion_view_checkbox") and self.dispersion_view_checkbox:
+                self.dispersion_view_checkbox.pack_forget()
+            if hasattr(self, "ellipse_view_checkbox") and self.ellipse_view_checkbox:
+                self.ellipse_view_checkbox.pack_forget()
+            if hasattr(self, "evo_view_checkbox") and self.evo_view_checkbox:
+                self.evo_view_checkbox.pack_forget()
+            if hasattr(self, "ranking_frame") and self.ranking_frame:
+                self.ranking_frame.pack_forget()
+
+        # Recriar abas e limpar dados velhos de acordo com o modo
+        self.id = 0
+        self.refresh()
+
+    def on_cell_edited(self, event) -> None:
+        try:
+            # Desempacota as informações do evento de edição do tksheet
+            row, col, value_before, value_after, *rest = event
+        except Exception:
+            print("Deu não")
+            return
+
+        # Impedir edições na diagonal ou triângulo superior
+        if row <= col:
+            if row == col:
+                self.sheet.set_cell_data(row, col, 0.0)
+            else:
+                # Restaura o valor espelhado do triângulo inferior
+                lower_val = self.sheet.get_cell_data(col, row)
+                self.sheet.set_cell_data(row, col, lower_val)
+            return
+
+        # Tratar valor numérico
+        try:
+            if value_after == "-" or value_after == "" or value_after is None:
+                val_num = np.nan
+            else:
+                val_num = float(value_after)
+        except ValueError:
+            # Reverte a edição na planilha caso o valor não seja conversível
+            self.sheet.set_cell_data(row, col, value_before)
+            return
+
+        # Atualiza o espelhamento simétrico na planilha no triângulo superior
+        self.sheet.set_cell_data(col, row, val_num)
+
+        # Atualiza no dataset
+        actual_phase = "pos" if self.phase == "pos" else "pre"
+        
+        if self.dataset_mode == "single":
+            if not self.dataset.participants or not self.dataset.participants.get("students"):
+                return
+            p = self.dataset.participants["students"][0]
+        else:
+            if not self.dataset.participants or not self.dataset.participants.get("students") or self.id is None:
+                return
+            p = self.dataset.participants["students"][self.id]
+
+        df = getattr(p, f"dataframe_{actual_phase}")
+        if df is not None:
+            header_r = self.dataset.headers[row]
+            header_c = self.dataset.headers[col]
+            df.at[header_r, header_c] = val_num
+            df.at[header_c, header_r] = val_num
+            getattr(p, f"mds_result_{actual_phase}").fit(df)
+
+        self.dataset.calc_mean()
+
+        # Redesenha a planilha (mantendo coloração e novidades) e re-plota o MDS
+        self.show_matrix(self.dataset.headers)
+        self.show_mds()
+
+    def on_select_cell(self, event) -> None:
+        print(event)
+        try:
+            row, col = event[0], event[1]
+        except Exception:
+            return
+
+        if not self.dataset or not self.dataset.headers:
+            return
+
+        num = len(self.dataset.headers)
+        editable_cells = [(r, c) for r in range(num) for c in range(num) if r > c]
+        if not editable_cells:
+            return
+
+        # Se for uma célula editável, atualiza prev_cell e sai
+        if row > col:
+            self.prev_cell = (row, col)
+            return
+
+        # Célula bloqueada. Precisamos pular.
+        if not hasattr(self, "prev_cell") or self.prev_cell is None:
+            self.prev_cell = editable_cells[0]
+
+        r_prev, c_prev = self.prev_cell
+        
+        try:
+            i_prev = editable_cells.index((r_prev, c_prev))
+        except ValueError:
+            i_prev = 0
+
+        # Determinar a direção do movimento
+        if row > r_prev and col == c_prev:
+            # Movimento para Baixo (Enter/Down) -> Procurar na mesma coluna
+            found = False
+            for r in range(row, num):
+                if r > col:
+                    self.sheet.select_cell(r, col)
+                    self.sheet.see(r, col, keep_selection=True)
+                    self.prev_cell = (r, col)
+                    found = True
+                    break
+            if not found:
+                for r in range(0, row):
+                    if r > col:
+                        self.sheet.select_cell(r, col)
+                        self.sheet.see(r, col, keep_selection=True)
+                        self.prev_cell = (r, col)
+                        break
+                        
+        elif row < r_prev and col == c_prev:
+            # Movimento para Cima (Up) -> Procurar na mesma coluna subindo
+            found = False
+            for r in range(row, -1, -1):
+                if r > col:
+                    self.sheet.select_cell(r, col)
+                    self.sheet.see(r, col, keep_selection=True)
+                    self.prev_cell = (r, col)
+                    found = True
+                    break
+            if not found:
+                for r in range(num - 1, row, -1):
+                    if r > col:
+                        self.sheet.select_cell(r, col)
+                        self.sheet.see(r, col, keep_selection=True)
+                        self.prev_cell = (r, col)
+                        break
+                        
+        elif col < c_prev or (row < r_prev and c_prev == 0):
+            # Movimento para Trás (Shift-Tab / Left) -> Ir para o editável anterior na lista
+            next_idx = (i_prev - 1) % len(editable_cells)
+            r_next, c_next = editable_cells[next_idx]
+            self.sheet.select_cell(r_next, c_next)
+            self.sheet.see(r_next, c_next, keep_selection=True)
+            self.prev_cell = (r_next, c_next)
+            
+        else:
+            # Movimento para Frente (Tab / Right) -> Ir para o próximo editável na lista
+            next_idx = (i_prev + 1) % len(editable_cells)
+            r_next, c_next = editable_cells[next_idx]
+            self.sheet.select_cell(r_next, c_next)
+            self.sheet.see(r_next, c_next, keep_selection=True)
+            self.prev_cell = (r_next, c_next)

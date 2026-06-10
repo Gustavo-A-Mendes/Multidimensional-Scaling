@@ -190,12 +190,7 @@ class MDSEngine:
             self.D = self.__euclidean_distance(data)
 
         elif self.dissimilarity == "precomputed":
-
-            D = np.array(data)[:n, :n]
-
-            # Ensure symmetry using upper triangle
-            tri_sup = np.triu(D)
-            self.D = tri_sup + tri_sup.T - np.diag(np.diag(tri_sup))
+            self.D = np.array(data)[:n, :n]
 
         else:
             raise ValueError(
@@ -279,9 +274,9 @@ class MDSEngine:
 
         # Verifica validade dos dados:
         if len(eigvals) < self.n_components:
-            raise ValueError(
-                "Erro de Consistência nos Dados: Não foi possível realizar a redução dimensional (MDS) porque o número de autovalores positivos é menor que a dimensão solicitada (2). Verifique se os dados inseridos possuem variação e número de itens suficientes."
-            )
+            self.eigenvalues = np.zeros(self.n_components)
+            # Retorna coordenadas zeradas na origem para permitir visualização e edição de matrizes novas
+            return np.zeros((self.n, self.n_components))
 
         self.eigenvalues = eigvals
 

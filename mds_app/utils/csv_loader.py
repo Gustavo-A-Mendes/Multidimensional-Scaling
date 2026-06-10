@@ -91,7 +91,29 @@ def separate_df(df: pd.DataFrame | dict[str, pd.DataFrame], file_type: str, file
 
         # matrices already separated:
         if file_type == "matrix":
-            pass
+            df_temp = df.copy()
+            first_col = df_temp.columns[0]
+            if "Unnamed" in first_col or first_col == "" or first_col is None:
+                df_temp.set_index(first_col, inplace=True)
+                df_temp.index.name = None
+            
+            df_temp.columns = [str(c).strip() for c in df_temp.columns]
+            df_temp.index = [str(i).strip() for i in df_temp.index]
+            
+            keywords = list(df_temp.columns)
+            mat = df_temp.apply(pd.to_numeric, errors='coerce')
+            
+            # Garantir simetria
+            mat = triangular_to_symmetric(mat)
+            
+            p_data = Participant(
+                pid=0,
+                name="Matriz Importada",
+                group="Aluno",
+                familiarity_level=" - "
+            )
+            p_data.add_dataframe(mat, "pre")
+            participants_data = [p_data]
 
         elif file_type == "forms":
             # separate metadata and df
