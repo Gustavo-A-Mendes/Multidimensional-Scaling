@@ -4,6 +4,25 @@ Este aplicativo é uma ferramenta desktop desenvolvida em Python para automatiza
 
 ---
 
+## 📌 Sumário
+
+- [🔍 Como o Programa Funciona](#🔍-como-o-programa-funciona)
+  - [1. Estrutura e Arquitetura do Código](#1-estrutura-e-arquitetura-do-código)
+  - [2. Lógica de Geração de Questões e Par a Par](#2-lógica-de-geração-de-questões-e-par-a-par)
+  - [3. Divisão Dinâmica de Seções](#3-divisão-dinâmica-de-seções)
+  - [4. Estrutura Padrão dos Formulários Gerados](#4-estrutura-padrão-dos-formulários-gerados)
+- [📖 Guia de Utilização Passo a Passo](#📖-guia-de-utilização-passo-a-passo)
+  - [Passo 1: Inicialização e Login](#passo-1-inicialização-e-login)
+  - [Passo 2: Configuração dos Conceitos](#passo-2-configuração-dos-conceitos)
+  - [Passo 3: Links Gerados e Sucesso](#passo-3-links-gerados-e-sucesso)
+- [🛠️ Guia do Desenvolvedor](#🛠️-guia-do-desenvolvedor)
+  - [📋 Pré-requisitos e Dependências](#📋-pré-requisitos-e-dependências)
+  - [🔑 Configurando Credenciais da API do Google](#🔑-configurando-credenciais-da-api-do-google)
+  - [🚀 Executando Localmente em Desenvolvimento](#🚀-executando-localmente-em-desenvolvimento)
+  - [📦 Compilando para um Executável Independente (.exe)](#📦-compilando-para-um-executável-independente-exe)
+
+---
+
 ## 🔍 Como o Programa Funciona
 
 O programa automatiza todo o processo de criação de formulários por meio da API do Google Forms, poupando o usuário de criar dezenas ou centenas de perguntas manualmente.
