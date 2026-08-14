@@ -61,7 +61,8 @@ Siga os passos abaixo para operar a interface gráfica do programa e criar seus 
    > 3. Na tela seguinte, confirme as permissões marcando os campos necessários e clique em **Continuar**.
    >
    > #### Tela de Alerta do Google (Exemplo):
-   > ![Tela de Alerta de App Não Verificado](./docs/images/alerta_unverified_app.png)
+   > <img src="./docs/images/alerta_unverified_app.png" width="500">
+   > <!--![Tela de Alerta de App Não Verificado](./docs/images/alerta_unverified_app.png) -->
    > <!-- *(Insira aqui o screenshot da tela do navegador exibindo o aviso do Google de app não verificado)* -->
 
 4. Uma vez autorizado, o navegador exibirá uma mensagem de sucesso e você poderá retornar à janela do aplicativo.
@@ -74,7 +75,8 @@ Siga os passos abaixo para operar a interface gráfica do programa e criar seus 
    > Este arquivo possibilita a reconexão automática ao iniciar o programa futuramente. Se você clicar em **Desconectar / Trocar de Conta**, o arquivo `token.json` será automaticamente removido do disco por segurança.
 
 #### Visualização da Tela de Autenticação:
-![Tela de Autenticação](./docs/images/passo1_login.png)
+<img src="./docs/images/passo1_login.png" width="500">
+<!-- ![Tela de Autenticação](./docs/images/passo1_login.png) -->
 <!-- *(Insira aqui o screenshot da tela inicial mostrando o botão de login e o status desconectado)* -->
 
 ---
@@ -86,7 +88,8 @@ Siga os passos abaixo para operar a interface gráfica do programa e criar seus 
 4. Após revisar os conceitos inseridos, clique no botão **Gerar Formulários (Pré e Pós)**.
 
 #### Visualização da Tela de Configuração:
-![Tela de Configuração](./docs/images/passo2_configuracao.png)
+<img src="./docs/images/passo2_configuracao.png" width="500">
+<!-- ![Tela de Configuração](./docs/images/passo2_configuracao.png) -->
 <!-- *(Insira aqui o screenshot mostrando a lista de conceitos preenchida no campo de texto e o botão de geração)* -->
 
 ---
@@ -100,7 +103,8 @@ Siga os passos abaixo para operar a interface gráfica do programa e criar seus 
     *   **Abrir no Navegador:** Abre a página de visualização do Google Forms gerado para conferência de layout e respostas.
 
 #### Visualização da Tela de Sucesso:
-![Tela de Sucesso](./docs/images/passo3_sucesso.png)
+<img src="./docs/images/passo3_sucesso.png" width="500">
+<!-- ![Tela de Sucesso](./docs/images/passo3_sucesso.png) -->
 <!-- *(Insira aqui o screenshot da aba final exibindo as URLs geradas e os respectivos botões de ação)* -->
 
 ---
