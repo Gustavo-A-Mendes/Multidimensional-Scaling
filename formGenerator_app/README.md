@@ -23,7 +23,7 @@ Este aplicativo é uma ferramenta desktop desenvolvida em Python para automatiza
 
 ---
 
-## 🔍 Como o Programa Funciona
+## Como o Programa Funciona
 
 O programa automatiza todo o processo de criação de formulários por meio da API do Google Forms, poupando o usuário de criar dezenas ou centenas de perguntas manualmente.
 
@@ -58,7 +58,7 @@ Cada formulário gerado contém:
 
 ---
 
-## 📖 Guia de Utilização Passo a Passo
+## Guia de Utilização Passo a Passo
 
 Siga os passos abaixo para operar a interface gráfica do programa e criar seus formulários.
 
@@ -128,11 +128,11 @@ Siga os passos abaixo para operar a interface gráfica do programa e criar seus 
 
 ---
 
-## 🛠️ Guia do Desenvolvedor
+## Guia do Desenvolvedor
 
 Esta seção orienta como configurar o ambiente de desenvolvimento, executar o script localmente e compilar o código em um executável (.exe) independente.
 
-### 📋 Pré-requisitos e Dependências
+### Pré-requisitos e Dependências
 Certifique-se de possuir o Python 3.8 ou superior instalado. No terminal, na raiz do repositório, instale todas as dependências requeridas utilizando o arquivo [`requirements.txt`](../requirements.txt):
 
 ```bash
@@ -147,7 +147,7 @@ As principais bibliotecas usadas por este módulo são:
 
 ---
 
-### 🔑 Configurando Credenciais da API do Google
+### Configurando Credenciais da API do Google
 Para que o código consiga interagir com o Google Forms, é obrigatório possuir as credenciais de cliente da API do Google Cloud:
 1. Certifique-se de ter o arquivo `client_secret.json` fornecido pelas credenciais de desenvolvedor do projeto.
 2. Coloque esse arquivo na pasta [`credentials/`](credentials).
@@ -155,7 +155,7 @@ Para que o código consiga interagir com o Google Forms, é obrigatório possuir
 
 ---
 
-### 🚀 Executando Localmente em Desenvolvimento
+### Executando Localmente em Desenvolvimento
 Para rodar a interface gráfica diretamente em ambiente de desenvolvimento sem compilar:
 
 ```bash
@@ -167,7 +167,7 @@ python formGenerator_app/run_form_generator.py
 
 ---
 
-### 📦 Compilando para um Executável Independente (.exe)
+### Compilando para um Executável Independente (.exe)
 Caso queira gerar uma versão final compactada de arquivo único que roda em computadores sem Python instalado:
 
 1. Execute o script de build [`build.py`](build.py):
