@@ -7,12 +7,16 @@ import numpy as np
 class ManualInputWindow(tk.Toplevel):
     def __init__(self, parent, concepts: list[str], on_confirm, init_df: pd.DataFrame | None = None, title: str = "Preencher Matriz de Dissimilaridade") -> None:
         super().__init__(parent)
+
+        self.withdraw() # Oculta a janela durante a inicialização
+
         self.parent = parent
         self.title(title)
         self.geometry("600x500")
         self.minsize(500, 400)
         self.transient(parent)
         self.grab_set()
+        self.focus_set()
 
         self.concepts = list(concepts)
         self.on_confirm = on_confirm
@@ -41,18 +45,33 @@ class ManualInputWindow(tk.Toplevel):
         y = root_y + (root_height - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
 
+        # Exibe a janela
+        self.deiconify()
+
     def _create_widgets(self) -> None:
         main_frame = ttk.Frame(self, padding=15)
         main_frame.pack(fill="both", expand=True)
 
+        # Botões
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill="x", side="bottom", pady=(10, 0))
+
+        self.btn_cancel = ttk.Button(btn_frame, text="Cancelar", command=self.destroy)
+        self.btn_cancel.pack(side="right", padx=5)
+
+        self.btn_ok = ttk.Button(btn_frame, text="Confirmar", command=self._confirm)
+        self.btn_ok.pack(side="right", padx=5)
+
+        # Aviso:
         lbl_info = ttk.Label(
             main_frame,
             text="Digite os valores de dissimilaridade (distâncias) na planilha abaixo.\n"
                  "Preencha apenas o triângulo inferior. A diagonal e o triângulo superior estão travados.",
             font=("Segoe UI", 9)
         )
-        lbl_info.pack(fill="x", pady=(0, 10))
-
+        lbl_info.pack(fill="x", side="top", pady=(0, 10))
+        
+        # Sheets:
         num = len(self.concepts)
 
         if self.df is None:
@@ -97,10 +116,11 @@ class ManualInputWindow(tk.Toplevel):
             "double_click_column_resize",
             "double_click_row_resize",
             "rc_select",
-            "edit_cell"
+            "edit_cell",
+            "copy"
         )
-        self.sheet.extra_bindings([("end_edit_cell", self.on_cell_edited), ("select_cell", self.on_select_cell)])
-        self.sheet.pack(fill="both", expand=True, pady=5)
+        self.sheet.extra_bindings([("end_edit_cell", self.on_cell_edited), ("select", self.on_select_cell)])
+        self.sheet.pack(fill="both", side="bottom", expand=True, pady=5)
 
         # Ajustar tamanhos
         size = 50
@@ -109,13 +129,21 @@ class ManualInputWindow(tk.Toplevel):
         
         # Colorir e tornar o triângulo superior e a diagonal como somente leitura
         readonly_list = []
+        diagonal_cells = []
+        upper_triangle_cells = []
         for r in range(num):
             for c in range(num):
                 if r <= c:
                     readonly_list.append((r, c))
-                    bg_color = "#e0e0e0" if r == c else "#f2f2f2"
-                    fg_color = "#808080"
-                    self.sheet.highlight_cells(row=r, column=c, bg=bg_color, fg=fg_color)
+                    if r == c:
+                        diagonal_cells.append((r, c))
+                    else:
+                        upper_triangle_cells.append((r, c))
+        
+        if diagonal_cells:
+            self.sheet.highlight_cells(cells=diagonal_cells, bg="#e0e0e0", fg="#808080", redraw=False)
+        if upper_triangle_cells:
+            self.sheet.highlight_cells(cells=upper_triangle_cells, bg="#f2f2f2", fg="#808080", redraw=False)
         
         try:
             self.sheet.readonly_cells(cells=readonly_list)
@@ -123,19 +151,12 @@ class ManualInputWindow(tk.Toplevel):
             # Fallback seguro caso a API do tksheet seja diferente
             print(f"tksheet readonly_cells fallback: {e}")
 
-        # Botões
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(fill="x", side="bottom", pady=(10, 0))
-
-        self.btn_cancel = ttk.Button(btn_frame, text="Cancelar", command=self.destroy)
-        self.btn_cancel.pack(side="right", padx=5)
-
-        self.btn_ok = ttk.Button(btn_frame, text="Confirmar", command=self._confirm)
-        self.btn_ok.pack(side="right", padx=5)
 
     def on_cell_edited(self, event) -> None:
+        # print(event)
         try:
-            row, col, value_before, value_after, *rest = event
+            ((row, col), value_before), = event.cells.table.items()
+            value_after = event.data.get((row, col))
         except Exception:
             return
 
@@ -157,8 +178,11 @@ class ManualInputWindow(tk.Toplevel):
             return
 
     def on_select_cell(self, event) -> None:
+        # print(event)
         try:
-            row, col = event[0], event[1]
+            _selected = event.selected
+            row, col = _selected.row, _selected.column
+            # print(row, col)
         except Exception:
             return
 
@@ -181,21 +205,22 @@ class ManualInputWindow(tk.Toplevel):
         num = len(self.concepts)
         
         # Determinar a direção do movimento
-        if row > r_prev and col == c_prev:
+        if row == 0 and col > c_prev:
             # Movimento para Baixo (Enter/Down) -> Procurar na mesma coluna
             found = False
             for r in range(row, num):
                 if r > col:
                     self.sheet.select_cell(r, col)
-                    self.sheet.see(r, col, keep_selection=True)
+                    self.sheet.see(r, col)
                     self.prev_cell = (r, col)
                     found = True
                     break
-            if not found:
-                for r in range(0, row):
+            if not found:   # Última coluna, volta para a primeira coluna
+                col = 0
+                for r in range(0, num):
                     if r > col:
                         self.sheet.select_cell(r, col)
-                        self.sheet.see(r, col, keep_selection=True)
+                        self.sheet.see(r, col)
                         self.prev_cell = (r, col)
                         break
                         
@@ -205,15 +230,16 @@ class ManualInputWindow(tk.Toplevel):
             for r in range(row, -1, -1):
                 if r > col:
                     self.sheet.select_cell(r, col)
-                    self.sheet.see(r, col, keep_selection=True)
+                    self.sheet.see(r, col)
                     self.prev_cell = (r, col)
                     found = True
                     break
-            if not found:
-                for r in range(num - 1, row, -1):
+            if not found:   # Move para coluna da esquerda (caso seja a primeira coluna, move para a penúltima)
+                col = (col-1) if col > 0 else num-2
+                for r in range(num - 1, 0, -1):
                     if r > col:
                         self.sheet.select_cell(r, col)
-                        self.sheet.see(r, col, keep_selection=True)
+                        self.sheet.see(r, col)
                         self.prev_cell = (r, col)
                         break
                         
@@ -222,7 +248,7 @@ class ManualInputWindow(tk.Toplevel):
             next_idx = (i_prev - 1) % len(self.editable_cells)
             r_next, c_next = self.editable_cells[next_idx]
             self.sheet.select_cell(r_next, c_next)
-            self.sheet.see(r_next, c_next, keep_selection=True)
+            self.sheet.see(r_next, c_next)
             self.prev_cell = (r_next, c_next)
             
         else:
@@ -230,7 +256,7 @@ class ManualInputWindow(tk.Toplevel):
             next_idx = (i_prev + 1) % len(self.editable_cells)
             r_next, c_next = self.editable_cells[next_idx]
             self.sheet.select_cell(r_next, c_next)
-            self.sheet.see(r_next, c_next, keep_selection=True)
+            self.sheet.see(r_next, c_next)
             self.prev_cell = (r_next, c_next)
 
     def _confirm(self) -> None:
