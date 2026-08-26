@@ -12,22 +12,11 @@ Matrix = npt.NDArray[np.float64]
 
 class Dataset:
     def __init__(self) -> None:
-        # self.participants: list[Participant] | None             = None
-        #
-        #
         # {
         #     "professors": list[Participant],
-        #     "professors_mean": {            -> Ideia de implementação
-        #         "centroids": Matrix,
-        #         "stds": Matrix
-        #     }
         #     "students": list[Participant]
-        #     "students_mean": {              -> ...
-        #         "centroids": Matrix,
-        #         "stds": Matrix
-        #     }
         # }
-        self.participants: dict[str, list[Participant]] | None = None
+        self.participants: dict[str, list[Participant]] | None      = None
 
         self.has_professors = False
         self.has_students = False
@@ -37,10 +26,6 @@ class Dataset:
         self.selected_headers: list[str] | None                     = None
         self.concept_mapping: dict[str, str]                        = {}
 
-        # self.centroids: Matrix | None   = None
-        # self.stds: Matrix | None        = None
-        # self.alinhados: Matrix | None   = None
-        #
         # centroids | stds | alinhados {
         #     "professors": Matrix,
         #     "students": Matrix
@@ -50,53 +35,32 @@ class Dataset:
         self.stds: dict[str, Matrix|None] | None = None
         self.alinhados: dict[str, Matrix|None] | None = None
 
+    def clear(self) -> None:
+        self.participants = None
+        self.has_professors = False
+        self.has_students = False
+        self.headers = None
+        self.selected_participants = None
+        self.selected_headers = None
+        self.concept_mapping = {}
+        self.mean = None
+        self.centroids = None
+        self.stds = None
+        self.alinhados = None
+
     def set_new_participants(self, participants: list[Participant]) -> None:
         # clear dataset:
         self.participants = None
         self.has_professors = False
         self.has_students = False
 
-        # --------------------------------------------------
-
-        count = {
-            "professors": 0,
-            "students": 0
-        }
-
-        participants_dict = {
-            "professors": [],
-            "students": []
-        }
-        for p in participants:
-            if p.group.upper() == "PROFESSOR":
-                self.has_professors = True
-                p.pid = count["professors"]
-                count["professors"] += 1
-                participants_dict["professors"].append(p)
-            elif p.group.upper() == "ALUNO":
-                self.has_students = True
-                p.pid = count["students"]
-                count["students"] += 1
-                participants_dict["students"].append(p)
-
-        self.participants = participants_dict
+        self.add_participants(participants, merge_post=False)
 
     #
     def add_participant(self, participant: Participant) -> None:
-        if self.participants is None:
-            self.participants = {
-                "professors": [],
-                "students": []
-            }
+        self.add_participants([participant], merge_post=False)
 
-        if participant.group.upper() == "PROFESSOR":
-            self.participants["professors"].append(participant)
-            self.has_professors = True
-        elif participant.group.upper() == "ALUNO":
-            self.participants["students"].append(participant)
-            self.has_students = True
-
-    def add_participants(self, participants: list[Participant]) -> None:
+    def add_participants(self, participants: list[Participant], merge_post: bool = False) -> None:
         if self.participants is None:
             self.participants = {
                 "professors": [],
@@ -106,32 +70,38 @@ class Dataset:
         for p_new in participants:
             group_key = "professors" if p_new.group.upper() == "PROFESSOR" else "students"
             
-            # Tentar encontrar o participante existente pelo nome para fundir os dados
-            existing_p = next((p for p in self.participants[group_key] if p.name == p_new.name), None)
-            
-            if existing_p:
-                # Mescla a matriz lida no pós-teste para dentro do objeto existente
-                if p_new.dataframe_pre is not None:
-                    existing_p.add_dataframe(p_new.dataframe_pre, phase="pos")
+            if merge_post:
+                # Tentar encontrar o participante existente pelo nome para fundir os dados
+                existing_p = next((p for p in self.participants[group_key] if p.name == p_new.name), None)
+                
+                if existing_p:
+                    # Mescla a matriz lida no pós-teste para dentro do objeto existente
+                    if p_new.dataframe_pre is not None:
+                        existing_p.add_dataframe(p_new.dataframe_pre, phase="pos")
+                else:
+                    # Participante novo que só respondeu o pós-teste
+                    if p_new.dataframe_pre is not None:
+                        p_new.add_dataframe(p_new.dataframe_pre, phase="pos")
+                        p_new.dataframe_pre = None
+                        p_new.mds_result_pre = None
+                        
+                    p_new.pid = len(self.participants[group_key])
+                    self.participants[group_key].append(p_new)
             else:
-                # Participante novo que só respondeu o pós-teste
-                if p_new.dataframe_pre is not None:
-                    p_new.add_dataframe(p_new.dataframe_pre, phase="pos")
-                    p_new.dataframe_pre = None
-                    p_new.mds_result_pre = None
-                    
+                # Adiciona o participante diretamente como está
                 p_new.pid = len(self.participants[group_key])
                 self.participants[group_key].append(p_new)
                 
-                if group_key == "professors":
-                    self.has_professors = True
-                else:
-                    self.has_students = True
+            if group_key == "professors":
+                self.has_professors = True
+            else:
+                self.has_students = True
 
     #
     def set_headers(self, headers: list[str]) -> None:
         self.headers = list(headers)
         self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
+        self.selected_headers = list(headers)
 
     #
     def set_selected_headers(self, headers: list[str]) -> None:
@@ -147,6 +117,9 @@ class Dataset:
 
         self.headers.append(header)
         self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
+        if self.selected_headers is not None:
+            if header not in self.selected_headers:
+                self.selected_headers.append(header)
 
         for group_key in ["professors", "students"]:
             if self.participants and group_key in self.participants:
@@ -189,6 +162,9 @@ class Dataset:
 
         self.headers.remove(header)
         self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
+        if self.selected_headers is not None:
+            if header in self.selected_headers:
+                self.selected_headers.remove(header)
 
         for group_key in ["professors", "students"]:
             if self.participants and group_key in self.participants:
@@ -212,6 +188,11 @@ class Dataset:
         self.headers[idx] = new_name
         self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
 
+        if self.selected_headers is not None:
+            if old_name in self.selected_headers:
+                s_idx = self.selected_headers.index(old_name)
+                self.selected_headers[s_idx] = new_name
+
         for group_key in ["professors", "students"]:
             if self.participants and group_key in self.participants:
                 for p in self.participants[group_key]:
@@ -232,6 +213,7 @@ class Dataset:
         else:
             self.headers = list(new_headers)
             self.concept_mapping = {h: f"C{i+1}" for i, h in enumerate(self.headers)}
+            self.selected_headers = list(new_headers)
             
             for group_key in ["professors", "students"]:
                 if self.participants and group_key in self.participants:
@@ -278,10 +260,21 @@ class Dataset:
         return target_aligned
 
     def calc_mean(self) -> None:
+        # Atualiza os estados de has_students e has_professors
+        self.has_students = self.participants is not None and len(self.participants.get("students", [])) > 0
+        self.has_professors = self.participants is not None and len(self.participants.get("professors", [])) > 0
+
         mean: dict[str, Matrix|None]            = {}
         centroids: dict[str, Matrix|None]       = {}
         stds: dict[str, Matrix|None]            = {}
         alinhados: dict[str, list[Matrix]|None] = {}
+
+        if self.participants is None:
+            self.mean = mean
+            self.centroids = centroids
+            self.alinhados = alinhados
+            self.stds = stds
+            return
 
         # 1. Unificar Professores (Priorizar Pós, usar Pré como fallback)
         unified_p_matrices = []
