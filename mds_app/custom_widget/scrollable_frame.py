@@ -7,8 +7,8 @@ class ScrollableFrame(ttk.Frame):
         and a ScrollBar
     '''
 
-    def __init__(self, parent: tk.Widget) -> None:
-        super().__init__(parent)
+    def __init__(self, parent: tk.Widget, **kwargs) -> None:
+        super().__init__(parent, **kwargs)
         # ----------------------------------------------------------------------
         # creating widgets:
         # ----------------------------------------------------------------------
@@ -58,26 +58,11 @@ class ScrollableFrame(ttk.Frame):
     # update scrollbar when window size changes (content frame):
     def _on_content_configure(self, event: tk.Event) -> None:
         self.canvas.itemconfigure(self.window_id, width=event.width)
-
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-        if self.content.winfo_reqheight() > self.canvas.winfo_height():
-            if not self.scrollbar.winfo_manager():
-                self.scrollbar.grid(row=0, column=1, sticky="ns")
-
-        else:
-            self.scrollbar.grid_forget()
 
     # update scrollbar when window size changes (canvas):
     def _on_canvas_configure(self, event: tk.Event) -> None:
         self.canvas.itemconfigure(self.window_id, width=event.width)
-
-        if self.content.winfo_reqheight() > self.canvas.winfo_height():
-            if not self.scrollbar.winfo_manager():
-                self.scrollbar.grid(row=0, column=1, sticky="ns")
-
-        else:
-            self.scrollbar.grid_forget()
 
     # create mouse binding when canvas is in focus:
     def _bind_mousewheel(self, event: tk.Event) -> None:

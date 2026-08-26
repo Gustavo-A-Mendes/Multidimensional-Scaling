@@ -6,11 +6,16 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 import os
 
+from mds_app.custom_widget.scrollable_frame import ScrollableFrame
 from mds_app.utils.export_functions import *
 
 class ExportWindow(tk.Toplevel):
     def __init__(self, parent, app_data, filtered_indices=None):
         super().__init__(parent)
+
+        self.withdraw() # Oculta a janela durante a inicialização
+        
+        self.parent = parent
         self.title("Exportar Dados")
         self.geometry("600x700")
         self.app_data = app_data
@@ -49,19 +54,50 @@ class ExportWindow(tk.Toplevel):
 
         self._setup_ui()
 
+        # Centralizar
+        self.update_idletasks()
+
+        root_window = self.parent.winfo_toplevel()
+        root_window.update_idletasks()
+
+        root_x = root_window.winfo_rootx()
+        root_y = root_window.winfo_rooty()
+        root_width = root_window.winfo_width()
+        root_height = root_window.winfo_height()
+
+        w = self.winfo_width()
+        h = self.winfo_height()
+        x = root_x + (root_width - w) // 2
+        y = root_y + (root_height - h) // 2
+        self.geometry(f"+{x}+{y}")
+
+        # Exibe a janela
+        self.deiconify()
+
     def _setup_ui(self):
-        container = ttk.Frame(self, padding=10)
-        container.pack(fill="both", expand=True)
+        self.scroll = ScrollableFrame(self, padding=10)
+        self.scroll.pack(fill="both", expand=True)
+        
+        container = self.scroll.content
 
         # Fases a Exportar
         lf_phases = ttk.LabelFrame(container, text="Fases da Análise", padding=5)
         lf_phases.pack(fill="x", pady=5)
-        self.phase_pre_chk = ttk.Checkbutton(lf_phases, text="Pré-teste", variable=self.var_phase_pre)
-        self.phase_pre_chk.pack(side="left", padx=10)
-        self.phase_pos_chk = ttk.Checkbutton(lf_phases, text="Pós-teste", variable=self.var_phase_pos, state="normal" if self.has_pos else "disabled", command=self._activation_opt)
-        self.phase_pos_chk.pack(side="left", padx=10)
-        self.evo_chk = ttk.Checkbutton(lf_phases, text="Incluir Evolução nos Gráficos (Requer Pós-teste)", variable=self.var_evolucao, state="disabled")
-        self.evo_chk.pack(side="left", padx=10)
+        
+        phases_row = ttk.Frame(lf_phases)
+        phases_row.pack(fill="x", pady=5)
+        phases_row.columnconfigure(0, weight=1)
+        phases_row.columnconfigure(1, weight=3)
+        phases_row.rowconfigure([0, 1], weight=1)
+
+        self.phase_pre_chk = ttk.Checkbutton(phases_row, text="Pré-teste", variable=self.var_phase_pre)
+        self.phase_pre_chk.grid(row=0, column=0, padx=10,pady=5, sticky="w")
+
+        self.phase_pos_chk = ttk.Checkbutton(phases_row, text="Pós-teste", variable=self.var_phase_pos, state="normal" if self.has_pos else "disabled", command=self._activation_opt)
+        self.phase_pos_chk.grid(row=0, column=1, padx=10, pady=5, sticky="w")
+
+        self.evo_chk = ttk.Checkbutton(phases_row, text="Incluir Evolução nos Gráficos (Requer Pós-teste)", variable=self.var_evolucao, state="disabled")
+        self.evo_chk.grid(row=1,column=1, padx=10, pady=5, sticky="w")
         
         # Filtro de Ranking
         total_students = len(self.app_data.participants["students"])
