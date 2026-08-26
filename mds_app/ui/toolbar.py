@@ -47,16 +47,10 @@ class ToolBar(ttk.Frame):
         self.mode_combo.bind("<<ComboboxSelected>>", self._on_mode_change)
 
         # button
-        self.btn_import_pre = ttk.Button(
+        self.btn_import_data = ttk.Button(
             self,
-            text="Importar Pré-teste",
-            command=lambda: self.import_csv(phase="Pré-teste")
-        )
-        self.btn_import_pos = ttk.Button(
-            self,
-            text="Adicionar Pós-teste",
-            command=lambda: self.import_csv(phase="Pós-teste"),
-            state="disabled"
+            text="Importar Dados",
+            command=self.show_import_dialog
         )
         self.btn_import_single = ttk.Button(
             self,
@@ -69,6 +63,11 @@ class ToolBar(ttk.Frame):
             command=self.abrir_exportacao,
             state="disabled"
         )
+        self.btn_clear = ttk.Button(
+            self,
+            text="Limpar Dataset",
+            command=self.limpar_dados
+        )
 
         # ----------------------------------------------------------------------
         # setting layout:
@@ -77,9 +76,9 @@ class ToolBar(ttk.Frame):
         self.mode_combo.pack(side="left", padx=5)
 
         # Empacota os botões do modo grupo inicialmente
-        self.btn_import_pre.pack(side="left", padx=5)
-        self.btn_import_pos.pack(side="left", padx=5)
+        self.btn_import_data.pack(side="left", padx=5)
         self.btn_export.pack(side="left", padx=5)
+        self.btn_clear.pack(side="left", padx=5)
 
     def _on_mode_change(self, event=None) -> None:
         if self.main_window:
@@ -90,42 +89,37 @@ class ToolBar(ttk.Frame):
                 self.main_window.set_mode("single")
 
     def set_mode(self, mode: str) -> None:
-        self.btn_import_pre.pack_forget()
-        self.btn_import_pos.pack_forget()
+        self.btn_import_data.pack_forget()
         self.btn_import_single.pack_forget()
         self.btn_export.pack_forget()
+        self.btn_clear.pack_forget()
 
         if mode == "group":
             self.mode_var.set("Análise de Grupo")
-            self.btn_import_pre.pack(side="left", padx=5)
-            self.btn_import_pos.pack(side="left", padx=5)
+            self.btn_import_data.pack(side="left", padx=5)
             
             # Atualizar estados de habilitado dos botões
             if self.dataset.participants and self.dataset.has_students:
                 self.btn_export.state(["!disabled"])
-                has_pos = any(p.dataframe_pos is not None for p in self.dataset.participants["professors"] + self.dataset.participants["students"])
-                if has_pos:
-                    self.btn_import_pos.state(["!disabled"])
-                else:
-                    self.btn_import_pos.state(["disabled"])
             else:
-                self.btn_import_pos.state(["disabled"])
                 self.btn_export.state(["disabled"])
                 
             self.btn_export.pack(side="left", padx=5)
+            self.btn_clear.pack(side="left", padx=5)
         else:
             self.mode_var.set("Análise de Matriz Única")
             self.btn_import_single.pack(side="left", padx=5)
-            
-            # Habilitar exportação se houver matriz única carregada
-            if self.dataset.participants and self.dataset.participants.get("students"):
-                self.btn_export.state(["!disabled"])
-            else:
-                self.btn_export.state(["disabled"])
-                
-            self.btn_export.pack(side="left", padx=5)
 
     def import_single_matrix(self) -> None:
+        if self.dataset.participants:
+            confirm = messagebox.askyesno(
+                "Aviso de Sobrescrita",
+                "Esta ação irá limpar todos os dados atuais do sistema para importar a nova matriz.\nDeseja continuar?",
+                parent=self
+            )
+            if not confirm:
+                return
+
         file_path = Path(filedialog.askopenfilename(
             filetypes=[
                 ("Arquivos CSV", "*.csv"),
@@ -155,15 +149,32 @@ class ToolBar(ttk.Frame):
                 if len(participants_data) > 1:
                     # Diálogo para escolher qual participante
                     choose_win = tk.Toplevel(self)
+                    
+                    choose_win.withdraw()
                     choose_win.title("Selecionar Participante")
                     choose_win.geometry("350x180")
                     choose_win.transient(self)
                     choose_win.grab_set()
                     
+                    # Centralizar na tela em relação ao pai
                     choose_win.update_idletasks()
-                    x = self.winfo_x() + (self.winfo_width() - choose_win.winfo_width()) // 2
-                    y = self.winfo_y() + (self.winfo_height() - choose_win.winfo_height()) // 2
-                    choose_win.geometry(f"+{x}+{y}")
+
+                    root_window = self.winfo_toplevel()
+                    root_window.update_idletasks()
+
+                    root_x = root_window.winfo_rootx()
+                    root_y = root_window.winfo_rooty()
+                    root_width = root_window.winfo_width()
+                    root_height = root_window.winfo_height()
+
+                    w = choose_win.winfo_width()
+                    h = choose_win.winfo_height()
+
+                    x = root_x + (root_width - w) // 2
+                    y = root_y + (root_height - h) // 2
+                    choose_win.geometry(f"{w}x{h}+{x}+{y}")
+
+                    choose_win.deiconify()
                     
                     ttk.Label(choose_win, text="O arquivo contém múltiplos participantes.\nSelecione qual deseja visualizar na Matriz Única:", justify="center").pack(pady=10)
                     
@@ -214,7 +225,7 @@ class ToolBar(ttk.Frame):
             from mds_app.ui.concept_manager_window import ConceptManagerWindow
             from mds_app.ui.manual_input_window import ManualInputWindow
 
-            def on_confirm_concepts(new_headers: list[str]) -> None:
+            def on_confirm_concepts(concept_mapping: list[tuple[str,str]]) -> None:
                 mat_confirmed = False
 
                 def on_confirm_matrix(df: pd.DataFrame) -> None:
@@ -225,42 +236,58 @@ class ToolBar(ttk.Frame):
                 p = participants_data[0]
                 df_mat = p.dataframe_pre.copy()
                 
-                old_set = set(headers)
-                new_set = set(new_headers)
-                new_concepts = new_set - old_set
+                # identifica os conceitos novos e os renomeados:
+                renamed_dic = {}
+                final_headers = []
+                has_new_concept = False
 
-                if (new_set != old_set) or (len(new_headers) != len(headers)):
-                    # redimensiona a matriz:
-                    df_mat = df_mat.reindex(index=new_headers, columns=new_headers)
+                for (nome_atual, nome_original) in concept_mapping:
+                    final_headers.append(nome_atual)
 
-                    # garante que a diagonal permaneça com valor 0:
-                    for h in new_headers:
-                        df_mat.at[h, h] = 0.0
+                    if nome_original is None:   # há conceito novo
+                        has_new_concept = True
                     
-                    # se houver mais conceitos, abre a janela de edição da matriz antes de salvar:
-                    if (new_set != old_set) or (len(new_headers) > len(headers)):
-                        dialog_matrix = ManualInputWindow(self, new_headers, on_confirm_matrix, df_mat, title="Preencher Matriz Única")
-                        self.wait_window(dialog_matrix)
+                    elif nome_atual != nome_original:
+                        renamed_dic[nome_original] = nome_atual
+                
+                # renomea os nomes alterados:
+                if renamed_dic:
+                    df_mat = df_mat.rename(index=renamed_dic, columns=renamed_dic)
 
-                        if not mat_confirmed:
-                            return
+                # redimensiona a matriz:
+                df_mat = df_mat.reindex(index=final_headers, columns=final_headers, fill_value=0.0)
 
-                    p.dataframe_pre = df_mat
-                else:
-                    df_mat.columns = new_headers
-                    df_mat.index = new_headers
+                # garante a diagonal 0:
+                for h in final_headers:
+                    df_mat.at[h, h] = 0.0
+                
+                # se houver mais conceitos, abre a janela de edição da matriz antes de salvar:
+                # if (new_set != old_set) or (len(final_headers) > len(headers)):
+                dialog_matrix = ManualInputWindow(self, final_headers, on_confirm_matrix, df_mat, title="Preencher Matriz Única")
+                self.wait_window(dialog_matrix)
+
+                if not mat_confirmed:
+                    return
+
+                p.dataframe_pre = df_mat
+                # else:
+                #     df_mat.columns = new_headers
+                #     df_mat.index = new_headers
                 
                 p.mds_result_pre.fit(df_mat)
 
                 self.dataset.set_new_participants([p])
-                self.dataset.set_headers(new_headers)
-                self.dataset.set_selected_headers(new_headers)
+                self.dataset.set_headers(final_headers)
+                self.dataset.set_selected_headers(final_headers)
                 self.dataset.calc_mean()
 
                 self.visualization_area.create_dataframe()
                 self.visualization_area.create_mds()
                 self.control_panel.refresh()
                 self.visualization_area.refresh()
+                if self.main_window:
+                    self.main_window.root.update()
+                    self.main_window.main_paned.sash_place(0, 300, 0)
 
                 dialog.destroy()
 
@@ -273,7 +300,6 @@ class ToolBar(ttk.Frame):
 
     # toolbar methods:
     def import_csv(self, phase: str = "Pré-teste") -> None:
-
         file_path = Path(filedialog.askopenfilename(
             filetypes=[
                 ("Arquivos CSV", "*.csv"),
@@ -316,11 +342,23 @@ class ToolBar(ttk.Frame):
             if phase == "Pré-teste":
                 self.dataset.set_new_participants(participants_data)
                 self.dataset.set_headers(headers)
-                # Habilita o botão do pós-teste
-                self.btn_import_pos.state(["!disabled"])
             else:
+                # Validar cabeçalhos compatíveis entre o Pré-teste e o Pós-teste
+                if self.dataset.headers:
+                    from mds_app.utils.validators import compare_headers
+                    diff = compare_headers(self.dataset.headers, headers)
+                    if diff["missing"] or diff["extra"]:
+                        msg = "Erro de Incompatibilidade:\n\n"
+                        msg += "Os conceitos contidos no arquivo de Pós-teste não coincidem com o Pré-teste já importado.\n\n"
+                        if diff["missing"]:
+                            msg += f"Conceitos ausentes no Pós-teste: {', '.join(diff['missing'])}\n"
+                        if diff["extra"]:
+                            msg += f"Conceitos extras no Pós-teste: {', '.join(diff['extra'])}\n"
+                        messagebox.showerror("Erro de Importação", msg)
+                        return
+
                 # Se for Pós-teste, apenas adiciona ao dataset existente
-                self.dataset.add_participants(participants_data)
+                self.dataset.add_participants(participants_data, merge_post=True)
 
             # Se não tem alunos, talvez nem faça sentido continuar o plot
             if not self.dataset.has_students:
@@ -370,11 +408,95 @@ class ToolBar(ttk.Frame):
 
             self.visualization_area.refresh()
 
+            # Forçar o sash_place após a renderização do gráfico
+            if self.main_window:
+                self.main_window.root.update()
+                self.main_window.main_paned.sash_place(0, 300, 0)
+
             self.btn_export.state(["!disabled"])
+
+            if phase == "Pré-teste":
+                confirm_pos = messagebox.askyesno(
+                    "Importação Concluída",
+                    "Pré-teste importado com sucesso!\nDeseja importar os dados de Pós-teste agora?",
+                    parent=self
+                )
+                if confirm_pos:
+                    self.import_csv(phase="Pós-teste")
 
 
         except Exception as e:
             messagebox.showerror("Erro ao importar CSV", str(e))
+
+    def show_import_dialog(self) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Importar Dados")
+        dialog.geometry("380x150")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        # Centralizar na tela em relação ao pai
+        dialog.update_idletasks()
+        root_window = self.winfo_toplevel()
+        root_window.update_idletasks()
+        root_x = root_window.winfo_rootx()
+        root_y = root_window.winfo_rooty()
+        root_width = root_window.winfo_width()
+        root_height = root_window.winfo_height()
+        w = 380
+        h = 150
+        x = root_x + (root_width - w) // 2
+        y = root_y + (root_height - h) // 2
+        dialog.geometry(f"{w}x{h}+{x}+{y}")
+
+        ttk.Label(
+            dialog,
+            text="Selecione o tipo de dado que deseja importar:",
+            font=("Arial", 10, "bold")
+        ).pack(pady=(15, 10))
+
+        def on_pre():
+            dialog.destroy()
+            if self.dataset.participants:
+                confirm = messagebox.askyesno(
+                    "Aviso de Sobrescrita",
+                    "A importação de um novo Pré-teste irá apagar todos os dados atuais do sistema.\nDeseja prosseguir?",
+                    parent=self
+                )
+                if not confirm:
+                    return
+            self.import_csv(phase="Pré-teste")
+
+        def on_pos():
+            dialog.destroy()
+            if not self.dataset.participants or not self.dataset.has_students:
+                messagebox.showerror(
+                    "Erro de Importação",
+                    "A importação de Pós-teste requer dados de Pré-teste já carregados.\nImporte o Pré-teste primeiro.",
+                    parent=self
+                )
+                return
+            
+            # Verificar se já existe pós-teste
+            has_pos = any(
+                p.dataframe_pos is not None 
+                for p in self.dataset.participants.get("students", []) + self.dataset.participants.get("professors", [])
+            )
+            if has_pos:
+                confirm = messagebox.askyesno(
+                    "Aviso de Sobrescrita",
+                    "Já existem dados de Pós-teste no sistema. Esta ação irá sobrescrever todos os dados de pós-teste atuais.\nDeseja prosseguir?",
+                    parent=self
+                )
+                if not confirm:
+                    return
+            self.import_csv(phase="Pós-teste")
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(fill="x", pady=10)
+
+        ttk.Button(btn_frame, text="Pré-teste", command=on_pre, width=15).pack(side="left", padx=(35, 10))
+        ttk.Button(btn_frame, text="Pós-teste", command=on_pos, width=15).pack(side="left", padx=(10, 35))
 
     # Na sua classe principal App:
     def abrir_exportacao(self):
@@ -382,3 +504,17 @@ class ToolBar(ttk.Frame):
         filtered = getattr(self.control_panel, "filtered_indices", None)
         export_dialog = ExportWindow(self, self.dataset, filtered)
         self.wait_window(export_dialog)
+
+    def limpar_dados(self) -> None:
+        if not self.dataset.participants:
+            messagebox.showinfo("Aviso", "O dataset já está vazio.", parent=self)
+            return
+
+        confirm = messagebox.askyesno(
+            "Confirmar Limpeza",
+            "Tem certeza que deseja limpar todo o dataset? Esta ação não pode ser desfeita e removerá todos os participantes.",
+            parent=self
+        )
+        if confirm:
+            if self.main_window:
+                self.main_window.clear_dataset()

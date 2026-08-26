@@ -28,10 +28,12 @@ class MainWindow:
         # Instanciar elementos do modo de grupo de forma isolada
         self.visualization_area_group = VisualizationArea(self.main_paned, self.dataset_group, mode="group")
         self.control_panel_group = ControlPanel(self.main_paned, self.dataset_group, self.visualization_area_group, mode="group")
+        self.control_panel_group.main_window = self
 
         # Instanciar elementos do modo específico de forma isolada
         self.visualization_area_single = VisualizationArea(self.main_paned, self.dataset_single, mode="single")
         self.control_panel_single = ControlPanel(self.main_paned, self.dataset_single, self.visualization_area_single, mode="single")
+        self.control_panel_single.main_window = self
 
         # Referências ativas no momento inicial (grupo)
         self.control_panel = self.control_panel_group
@@ -51,10 +53,10 @@ class MainWindow:
         '''...'''
 
         # Adicionar apenas os painéis do modo de grupo inicialmente
-        self.main_paned.add(self.control_panel_group, minsize=100)
+        self.main_paned.add(self.control_panel_group, minsize=100, width=300)
         self.main_paned.add(self.visualization_area_group, minsize=100)
 
-        self.root.update_idletasks()
+        self.root.update()
         self.main_paned.sash_place(0, 300, 0)
 
         self.toolbar.pack(side="top", fill="x")
@@ -87,10 +89,10 @@ class MainWindow:
             self.visualization_area = self.visualization_area_single
 
         # Adicionar os painéis do modo novo
-        self.main_paned.add(self.control_panel, minsize=100)
+        self.main_paned.add(self.control_panel, minsize=100, width=300)
         self.main_paned.add(self.visualization_area, minsize=100)
         
-        self.root.update_idletasks()
+        self.root.update()
         self.main_paned.sash_place(0, 300, 0)
 
         # Atualizar a toolbar com referências do modo novo
@@ -103,4 +105,11 @@ class MainWindow:
         self.control_panel.refresh()
         self.visualization_area.refresh()
         self.toolbar.set_mode(mode)
+
+    def clear_dataset(self) -> None:
+        self.dataset.clear()
+        self.control_panel.refresh()
+        self.visualization_area.refresh()
+        self.toolbar.set_mode(self.current_mode)
+
 
