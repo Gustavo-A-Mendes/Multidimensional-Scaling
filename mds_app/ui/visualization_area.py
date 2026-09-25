@@ -27,7 +27,7 @@ class VisualizationArea(ttk.Frame):
         self.sheet: Sheet | None            = None
         self.notebook: ttk.Notebook | None  = None
 
-        self.id: int | None = None
+        self.id: int | None = 0 if mode == "single" else None
         self.phase: str = "pre"
         self.selected_group: str = "students"
         self.curr_view = None
@@ -41,6 +41,10 @@ class VisualizationArea(ttk.Frame):
         self.ellipse_view_values = tk.BooleanVar(value=False)
         self.evo_view_values = tk.BooleanVar(value=False)
         self.all_selection_values = tk.BooleanVar(value=False)
+
+        self.p_mean_view = tk.BooleanVar(value=False)
+        self.s_mean_view = tk.BooleanVar(value=False)
+        self.ellipses_view = tk.BooleanVar(value=False)
 
         # Variables for ranking filter (in ControlPanel but owned/initialized here)
         self.ranking_mode_var = tk.StringVar(value="Todos os Alunos")
@@ -78,7 +82,7 @@ class VisualizationArea(ttk.Frame):
         self.notebook.bind("<<NotebookTabChanged>>", lambda e: self.get_current_tab())
 
     def create_dataframe(self) -> None:
-        # Limpar abas de dados anteriores
+        # Limpar aba Dados anterior se já existir
         tabs = self.notebook.tabs()
         for tab in tabs:
             if self.notebook.tab(tab, "text") not in ("Início"):
@@ -148,9 +152,12 @@ class VisualizationArea(ttk.Frame):
         self.num_concepts = len(self.dataset.headers) if self.dataset.headers else 0
         self.num_participants = len(s_participants)
 
-        self.p_mean_view = tk.BooleanVar(value=False)
-        self.s_mean_view = tk.BooleanVar(value=False)
-        self.ellipses_view = tk.BooleanVar(value=False)
+        if not hasattr(self, "p_mean_view"):
+            self.p_mean_view = tk.BooleanVar(value=False)
+        if not hasattr(self, "s_mean_view"):
+            self.s_mean_view = tk.BooleanVar(value=False)
+        if not hasattr(self, "ellipses_view"):
+            self.ellipses_view = tk.BooleanVar(value=False)
 
         cmap = plt.get_cmap('tab20')
 
@@ -211,6 +218,12 @@ class VisualizationArea(ttk.Frame):
         has_professors = self.dataset.participants and len(self.dataset.participants.get("professors", [])) > 0 if self.dataset else False
 
         if headers and (has_students or has_professors):
+            tabs = [self.notebook.tab(t, "text") for t in self.notebook.tabs()]
+            if "Dados" not in tabs or self.sheet is None:
+                self.create_dataframe()
+            if "MDS view" not in tabs:
+                self.create_mds()
+
             self.show_matrix(headers)
             self.show_mds()
         else:
@@ -227,16 +240,26 @@ class VisualizationArea(ttk.Frame):
             self._clear_sheet()
             return
 
+        if not self.sheet:
+            self.create_dataframe()
+
         s_participants = self.dataset.participants.get("students", [])
         p_participants = self.dataset.participants.get("professors", [])
 
+        # Modo de matriz única sempre seleciona o participante 0 (Aluno)
+        if self.dataset_mode == "single":
+            self.id = 0
+            self.selected_group = "students"
+        elif self.id is None:
+            self.id = 0
+
         # Verificar se ID é válido
         if self.selected_group == "students":
-            if self.id is None or self.id < 0 or self.id >= len(s_participants):
+            if not s_participants or self.id < 0 or self.id >= len(s_participants):
                 self._clear_sheet()
                 return
         else:
-            if self.id is None or self.id < 0 or self.id >= len(p_participants):
+            if not p_participants or self.id < 0 or self.id >= len(p_participants):
                 self._clear_sheet()
                 return
 
@@ -245,11 +268,15 @@ class VisualizationArea(ttk.Frame):
         self.sheet.row_index([])
 
         # Carregar matriz com base na seleção
-        if self.s_mean_view.get():
+        is_mean = self.s_mean_view.get() if hasattr(self, "s_mean_view") else False
+        if is_mean and self.dataset_mode != "single":
             actual_phase = "pos" if self.phase == "pos" else "pre"
             mean_key = f"students_{actual_phase}"
-            np2df = pd.DataFrame(data=self.dataset.mean[mean_key], index=headers, columns=headers)
-            df = np2df.loc[headers, headers]
+            if self.dataset.mean and mean_key in self.dataset.mean and self.dataset.mean[mean_key] is not None:
+                np2df = pd.DataFrame(data=self.dataset.mean[mean_key], index=headers, columns=headers)
+                df = np2df.loc[headers, headers]
+            else:
+                df = pd.DataFrame(np.nan, index=headers, columns=headers)
         else:
             actual_phase = "pos" if self.phase == "pos" else "pre"
             if self.selected_group == "professors":
@@ -257,7 +284,7 @@ class VisualizationArea(ttk.Frame):
                 participant_df = p.dataframe_pos if p.dataframe_pos is not None else p.dataframe_pre
             else:
                 p = s_participants[self.id]
-                participant_df = getattr(p, f"dataframe_{actual_phase}")
+                participant_df = getattr(p, f"dataframe_{actual_phase}", None)
                 if participant_df is None:
                     participant_df = p.dataframe_pre
             
@@ -396,7 +423,8 @@ class VisualizationArea(ttk.Frame):
             
             if self.ranked_indices != ranked_indices:
                 self.ranked_indices = ranked_indices
-                self.event_generate("<<RankingUpdated>>")
+                if self.dataset_mode == "group":
+                    self.event_generate("<<RankingUpdated>>")
             else:
                 self.ranked_indices = ranked_indices
 
@@ -694,11 +722,20 @@ class VisualizationArea(ttk.Frame):
         return mcolors.to_hex(rgb)
 
     def get_current_tab(self) -> None:
-        notebook = self.notebook
-        tab = notebook.tab(notebook.select(), "text")
-        unicoded_name = unicode_text(tab)
-        treated_name = unicoded_name.lower().replace(" ", "_")
-        self.curr_view = treated_name
+        if not self.notebook:
+            return
+        try:
+            tab = self.notebook.tab(self.notebook.select(), "text")
+            unicoded_name = unicode_text(tab)
+            treated_name = unicoded_name.lower().replace(" ", "_")
+            self.curr_view = treated_name
+
+            if treated_name == "dados" and self.sheet:
+                if self.dataset and self.dataset.headers:
+                    self.show_matrix(self.dataset.headers)
+                self.sheet.refresh()
+        except Exception:
+            pass
 
     def set_mode(self, mode: str) -> None:
         self.dataset_mode = mode
