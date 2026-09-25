@@ -18,6 +18,7 @@ class ControlPanel(ttk.Frame):
 
         self.selected_participant: Participant | None = None
         self.selected_group: str = "students"
+        self.tree: ttk.Treeview | None = None
 
         # Variáveis globais
         self.phase_var = tk.StringVar(value="pre")
@@ -25,8 +26,9 @@ class ControlPanel(ttk.Frame):
 
         self._create_widgets()
         
-        # Escutar atualizações de ranking
-        self.visualization_area.bind("<<RankingUpdated>>", self._on_ranking_updated)
+        # Escutar atualizações de ranking (apenas no modo de grupo)
+        if self.dataset_mode == "group":
+            self.visualization_area.bind("<<RankingUpdated>>", self._on_ranking_updated)
 
 
     def _create_widgets(self) -> None:
@@ -368,6 +370,9 @@ class ControlPanel(ttk.Frame):
 
 
     def _populate_tree(self) -> None:
+        if not hasattr(self, "tree") or self.tree is None:
+            return
+
         for item in self.tree.get_children():
             self.tree.delete(item)
 
@@ -619,13 +624,16 @@ class ControlPanel(ttk.Frame):
         status = self.radio_var.get()
         phase = self.phase_var.get()
 
-        if status == "default":
-            self.tree.configure(selectmode="browse")
-            self._update_plot_checkbox_states()
-        else: # status == "mean"
-            self.tree.configure(selectmode="none")
+        if hasattr(self, "tree") and self.tree is not None:
+            if status == "default":
+                self.tree.configure(selectmode="browse")
+                self._update_plot_checkbox_states()
+            else: # status == "mean"
+                self.tree.configure(selectmode="none")
 
-        selected_items = self.tree.selection()
+            selected_items = self.tree.selection()
+        else:
+            selected_items = []
         idx = 0
         group = "students"
         
@@ -682,8 +690,9 @@ class ControlPanel(ttk.Frame):
     def _on_ranking_updated(self, event=None) -> None:
         # Quando a área de visualização atualiza a ordenação de alunos pelo ranking,
         # atualiza a Treeview para destacar o ranking
-        if hasattr(self.visualization_area, "ranked_indices"):
-            self._populate_tree()
+        if self.dataset_mode == "group" and hasattr(self, "tree") and self.tree is not None:
+            if hasattr(self.visualization_area, "ranked_indices"):
+                self._populate_tree()
 
 
     # ----------------------------------------------------
