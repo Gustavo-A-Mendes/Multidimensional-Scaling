@@ -1,9 +1,5 @@
-from typing import Any
-
 import numpy as np
 import numpy.typing as npt
-import scipy
-from pandas.core.array_algos.transforms import shift
 from scipy.linalg import orthogonal_procrustes
 
 from mds_app.data.participant import Participant
@@ -67,12 +63,23 @@ class Dataset:
                 "students": []
             }
 
+        def is_prof(grp: str) -> bool:
+            if not grp:
+                return False
+            return grp.strip().upper() in ["PROFESSOR", "PROFESSORES", "DOCENTE", "DOCENTES", "GABARITO"]
+
         for p_new in participants:
-            group_key = "professors" if p_new.group.upper() == "PROFESSOR" else "students"
+            group_key = "professors" if is_prof(p_new.group) else "students"
             
             if merge_post:
                 # Tentar encontrar o participante existente pelo nome para fundir os dados
-                existing_p = next((p for p in self.participants[group_key] if p.name == p_new.name), None)
+                existing_p = next((p for p in self.participants[group_key] if p.name.strip().lower() == p_new.name.strip().lower()), None)
+                if not existing_p:
+                    # Procurar no outro grupo caso haja discrepância de classificação de grupo
+                    other_key = "students" if group_key == "professors" else "professors"
+                    existing_p = next((p for p in self.participants[other_key] if p.name.strip().lower() == p_new.name.strip().lower()), None)
+                    if existing_p:
+                        group_key = other_key
                 
                 if existing_p:
                     # Mescla a matriz lida no pós-teste para dentro do objeto existente
@@ -282,11 +289,11 @@ class Dataset:
         unified_p_participants = []
 
         for p in self.participants["professors"]:
-            if p.dataframe_pos is not None:
+            if p.dataframe_pos is not None and not p.dataframe_pos.isna().all().all():
                 unified_p_matrices.append(p.mds_result_pos.D)
                 unified_p_coords.append(p.mds_result_pos.X)
                 unified_p_participants.append(p)
-            elif p.dataframe_pre is not None:
+            elif p.dataframe_pre is not None and not p.dataframe_pre.isna().all().all():
                 unified_p_matrices.append(p.mds_result_pre.D)
                 unified_p_coords.append(p.mds_result_pre.X)
                 unified_p_participants.append(p)
@@ -319,7 +326,10 @@ class Dataset:
 
         # 2. Estudantes
         for phase in ["pre", "pos"]:
-            s_participants = [p for p in self.participants["students"] if getattr(p, f"dataframe_{phase}") is not None]
+            s_participants = [
+                p for p in self.participants["students"] 
+                if getattr(p, f"dataframe_{phase}") is not None and not getattr(p, f"dataframe_{phase}").isna().all().all()
+            ]
 
             s_coord_array = [getattr(s, f"mds_result_{phase}").X for s in s_participants]
             s_matrix = [getattr(s, f"mds_result_{phase}").D for s in s_participants]
@@ -330,26 +340,16 @@ class Dataset:
             alinhados[f"students_{phase}"] = None
 
             s_alinhados = []
-            s_referencia = centroids["professors"]
-
-            if s_referencia is not None:
-                if s_coord_array:
-                    for i in range(len(s_coord_array)):
-                        m2 = self.rigid_procrustes(s_referencia, s_coord_array[i])
-                        s_alinhados.append(m2)
-            elif s_coord_array:
-                if phase == "pos" and centroids.get("students_pre") is not None:
+            if s_coord_array:
+                if centroids.get("professors") is not None:
+                    s_referencia = centroids["professors"]
+                elif phase == "pos" and centroids.get("students_pre") is not None:
                     s_referencia = centroids["students_pre"]
-                    for i in range(len(s_coord_array)):
-                        m2 = self.rigid_procrustes(s_referencia, s_coord_array[i])
-                        s_alinhados.append(m2)
                 else:
                     s_referencia = s_coord_array[0]
-                    s_alinhados = [s_referencia]
-                    if len(s_coord_array) > 1:
-                        for i in range(1, len(s_coord_array)):
-                            m2 = self.rigid_procrustes(s_referencia, s_coord_array[i])
-                            s_alinhados.append(m2)
+
+                for coord in s_coord_array:
+                    s_alinhados.append(self.rigid_procrustes(s_referencia, coord))
 
             if s_alinhados:
                 s_mean = np.nanmean(s_matrix, axis=0)
@@ -366,20 +366,6 @@ class Dataset:
         self.centroids = centroids
         self.alinhados = alinhados
         self.stds = stds
-
-    #
-    @staticmethod
-    def get_shift_matrix(mats: npt.NDArray[Matrix]) -> Matrix:
-
-        # encontre mínimos em x e y
-        min_x = mats[..., 0].min()
-        min_y = mats[..., 1].min()
-
-        # deslocamentos necessários (se já forem positivos, o shift será 0)
-        shift_x = -min_x if min_x < 0 else 0.0
-        shift_y = -min_y if min_y < 0 else 0.0
-
-        return np.array([shift_x, shift_y])
 
     #
     def get_global_limits(self) -> tuple[float, float]:

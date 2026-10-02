@@ -1,23 +1,8 @@
+import io
+import zipfile
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.collections import PathCollection, LineCollection
-
 import pandas as pd
-import zipfile
-import io
-
-def gerar_plot_para_exportar(dados_aluno, config_opcoes):
-    # Cria uma figura nova que não vai para o canvas da tela
-    fig, ax = plt.subplots(figsize=(8, 6))
-
-    # ... executa a mesma lógica da sua função show_mds ...
-    # Se config_opcoes['gabarito']: desenha linhas de conexão
-    # Se config_opcoes['elipse']: desenha as elipses
-
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=150)
-    plt.close(fig)  # Importante para não vazar memória
-    return buf.getvalue()  # Retorna os bytes da imagem
 
 
 def exportar_tudo_para_zip(zip_path, data, ui_config, filtered_indices=None, progress_callback=None):
@@ -57,12 +42,6 @@ def exportar_tudo_para_zip(zip_path, data, ui_config, filtered_indices=None, pro
             if filtered_indices is not None and len(filtered_indices) > 0:
                 filtered_mds = data.alinhados.get(f"students_{phase}")
                 if filtered_mds is not None:
-                    alunos_mean = None # For matrices we don't recalculate the raw matrix mean, wait, yes we can!
-                    filtered_df = [data.participants["students"][i].dataframe for i in filtered_indices]
-                    # But the mean of dataframes is not easily calculated here. Let's stick to centroid mean.
-                    # Wait, if we use filtered_indices, we won't output Média_Turma in Matrices, or we output the global.
-                    # Let's keep alunos_mean global for matrices, or calculate it.
-                    # Actually, data.mean["students"] is what we have. It's complex to average DataFrames.
                     filtered_mds_subset = [filtered_mds[i] for i in filtered_indices]
                     alunos_centroid = np.mean(filtered_mds_subset, axis=0)
             

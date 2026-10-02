@@ -81,20 +81,7 @@ def triangular_to_symmetric(df):
     '''
 
     new_df = df.fillna(df.T)
-
     np.fill_diagonal(new_df.values, 0)
-    # # convert to np.array:
-    # arr = df.to_numpy()
-    # # create symmetric matrix:
-    # arr_t = arr.T
-
-    # sym = np.where(np.isnan(arr), arr_t, arr)
-    # np.fill_diagonal(sym, 0)
-
-    # # re-convert to a DataFrame:
-    # new_df = pd.DataFrame(sym, index=df.index, columns=df.columns)
-
-    # replacing
     return new_df
 
 def unicode_text(text):
