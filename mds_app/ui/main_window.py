@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from mds_app.data.dataset import Dataset
+from mds_app.ui.analysis_mediator import AnalysisMediator
 from mds_app.ui.toolbar import ToolBar
 from mds_app.ui.control_panel import ControlPanel
 from mds_app.ui.visualization_area import VisualizationArea
@@ -15,6 +16,14 @@ class MainWindow:
 
         self.dataset_group = Dataset()
         self.dataset_single = Dataset()
+
+        # Instanciar os mediadores para cada modo
+        self.mediator_group = AnalysisMediator(self.dataset_group, mode="group")
+        self.mediator_single = AnalysisMediator(self.dataset_single, mode="single")
+        self.mediator_group.main_window = self
+        self.mediator_single.main_window = self
+
+        self.mediator = self.mediator_group
         self.dataset = self.dataset_group
         self.current_mode = "group"
 
@@ -25,14 +34,14 @@ class MainWindow:
         # main PanedWindow (horizontal):
         self.main_paned = tk.PanedWindow(self.root, orient="horizontal")
 
-        # Instanciar elementos do modo de grupo de forma isolada
-        self.visualization_area_group = VisualizationArea(self.main_paned, self.dataset_group, mode="group")
-        self.control_panel_group = ControlPanel(self.main_paned, self.dataset_group, self.visualization_area_group, mode="group")
+        # Instanciar elementos do modo de grupo via mediator_group
+        self.visualization_area_group = VisualizationArea(self.main_paned, self.mediator_group, mode="group")
+        self.control_panel_group = ControlPanel(self.main_paned, self.mediator_group, mode="group")
         self.control_panel_group.main_window = self
 
-        # Instanciar elementos do modo específico de forma isolada
-        self.visualization_area_single = VisualizationArea(self.main_paned, self.dataset_single, mode="single")
-        self.control_panel_single = ControlPanel(self.main_paned, self.dataset_single, self.visualization_area_single, mode="single")
+        # Instanciar elementos do modo específico via mediator_single
+        self.visualization_area_single = VisualizationArea(self.main_paned, self.mediator_single, mode="single")
+        self.control_panel_single = ControlPanel(self.main_paned, self.mediator_single, mode="single")
         self.control_panel_single.main_window = self
 
         # Referências ativas no momento inicial (grupo)
@@ -44,7 +53,8 @@ class MainWindow:
             self.root,
             self.dataset,
             self.control_panel,
-            self.visualization_area
+            self.visualization_area,
+            mediator=self.mediator
         )
         self.toolbar.dataset_mode = self.current_mode
         self.toolbar.main_window = self  # Referência de volta para MainWindow
@@ -78,12 +88,14 @@ class MainWindow:
             self.main_paned.forget(self.control_panel_single)
             self.main_paned.forget(self.visualization_area_single)
 
-        # Atualizar referências de dados
+        # Atualizar referências de dados e mediador
         if mode == "group":
+            self.mediator = self.mediator_group
             self.dataset = self.dataset_group
             self.control_panel = self.control_panel_group
             self.visualization_area = self.visualization_area_group
         else:
+            self.mediator = self.mediator_single
             self.dataset = self.dataset_single
             self.control_panel = self.control_panel_single
             self.visualization_area = self.visualization_area_single
@@ -96,6 +108,7 @@ class MainWindow:
         self.main_paned.sash_place(0, 300, 0)
 
         # Atualizar a toolbar com referências do modo novo
+        self.toolbar.mediator = self.mediator
         self.toolbar.dataset = self.dataset
         self.toolbar.control_panel = self.control_panel
         self.toolbar.visualization_area = self.visualization_area
@@ -107,9 +120,7 @@ class MainWindow:
         self.toolbar.set_mode(mode)
 
     def clear_dataset(self) -> None:
-        self.dataset.clear()
-        self.control_panel.refresh()
-        self.visualization_area.refresh()
+        self.mediator.clear_dataset()
         self.toolbar.set_mode(self.current_mode)
 
 

@@ -4,51 +4,60 @@ from tksheet import Sheet
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from matplotlib.collections import PathCollection, LineCollection
+from matplotlib.collections import LineCollection
 from matplotlib.patches import Ellipse
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from matplotlib.figure import Figure
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 
-from mds_app.custom_widget.scrollable_frame import ScrollableFrame
 from mds_app.data.dataset import Dataset
-from mds_app.data.participant import Participant
 from mds_app.utils.validators import *
 
 Matrix = npt.NDArray[np.float64]
 
 class VisualizationArea(ttk.Frame):
-    def __init__(self, parent, dataset, mode: str = "group") -> None:
+    def __init__(self, parent, mediator, mode: str = "group") -> None:
         super().__init__(parent)
         self.parent = parent
-        self.dataset: Dataset = dataset
+
+        if hasattr(mediator, "dataset"):
+            self.mediator = mediator
+            self.dataset: Dataset = mediator.dataset
+            self.dataset_mode = mediator.mode
+        else:
+            from mds_app.ui.analysis_mediator import AnalysisMediator
+            self.dataset = mediator
+            self.dataset_mode = mode
+            self.mediator = AnalysisMediator(self.dataset, mode=mode)
+
+        self.mediator.register_visualization_area(self)
+
         self.sheet: Sheet | None            = None
         self.notebook: ttk.Notebook | None  = None
 
-        self.id: int | None = 0 if mode == "single" else None
-        self.phase: str = "pre"
-        self.selected_group: str = "students"
+        self.id: int | None = self.mediator.selected_id
+        self.phase: str = self.mediator.phase_var.get()
+        self.selected_group: str = self.mediator.selected_group
         self.curr_view = None
         self.ranked_indices: list[int] = []
 
-        # Plot variables
-        self.highlight_values = tk.BooleanVar(value=False)
-        self.destaque_view_values = tk.BooleanVar(value=True)
-        self.mean_view_values = tk.BooleanVar(value=False)
-        self.dispersion_view_values = tk.BooleanVar(value=False)
-        self.ellipse_view_values = tk.BooleanVar(value=False)
-        self.evo_view_values = tk.BooleanVar(value=False)
-        self.all_selection_values = tk.BooleanVar(value=False)
+        # Plot variables vinculadas ao mediador (Fonte Única da Verdade)
+        self.highlight_values = self.mediator.highlight_values
+        self.destaque_view_values = self.mediator.destaque_view_values
+        self.mean_view_values = self.mediator.mean_view_values
+        self.dispersion_view_values = self.mediator.dispersion_view_values
+        self.ellipse_view_values = self.mediator.ellipse_view_values
+        self.evo_view_values = self.mediator.evo_view_values
+        self.all_selection_values = self.mediator.all_selection_values
 
-        self.p_mean_view = tk.BooleanVar(value=False)
-        self.s_mean_view = tk.BooleanVar(value=False)
-        self.ellipses_view = tk.BooleanVar(value=False)
+        self.p_mean_view = self.mediator.p_mean_view
+        self.s_mean_view = self.mediator.s_mean_view
+        self.ellipses_view = self.mediator.ellipses_view
 
-        # Variables for ranking filter (in ControlPanel but owned/initialized here)
-        self.ranking_mode_var = tk.StringVar(value="Todos os Alunos")
-        self.ranking_n_var = tk.IntVar(value=5)
+        # Variáveis de ranking vinculadas ao mediador
+        self.ranking_mode_var = self.mediator.ranking_mode_var
+        self.ranking_n_var = self.mediator.ranking_n_var
 
         self.tags: list[tk.BooleanVar] = [
             self.highlight_values,
@@ -58,9 +67,16 @@ class VisualizationArea(ttk.Frame):
             self.ellipse_view_values,
             self.evo_view_values
         ]
-        self.dataset_mode = mode
 
         self._create_widgets()
+
+    @property
+    def concept_visibility(self) -> list[tk.BooleanVar]:
+        return self.mediator.concept_visibility
+
+    @concept_visibility.setter
+    def concept_visibility(self, val: list[tk.BooleanVar]) -> None:
+        self.mediator.concept_visibility = val
 
     def _create_widgets(self) -> None:
         if self.notebook:
@@ -161,9 +177,8 @@ class VisualizationArea(ttk.Frame):
 
         cmap = plt.get_cmap('tab20')
 
-        # Re-inicializar visibilidade dos conceitos
-        if not hasattr(self, "concept_visibility") or len(self.concept_visibility) != self.num_concepts:
-            self.concept_visibility = [tk.BooleanVar(value=True) for _ in range(self.num_concepts)]
+        # Re-inicializar visibilidade dos conceitos via mediador
+        self.mediator.sync_concept_visibility()
 
         # Preparar os scatter plots dos conceitos
         self.ax.clear()
@@ -285,8 +300,6 @@ class VisualizationArea(ttk.Frame):
             else:
                 p = s_participants[self.id]
                 participant_df = getattr(p, f"dataframe_{actual_phase}", None)
-                if participant_df is None:
-                    participant_df = p.dataframe_pre
             
             if participant_df is not None:
                 df = participant_df.loc[headers, headers]
@@ -382,73 +395,51 @@ class VisualizationArea(ttk.Frame):
         if not p_participants and not s_participants:
             return
             
+        if not hasattr(self, "scatters") or not self.scatters:
+            return
+            
         has_students = s_participants and len(s_participants) > 0
         has_professors = p_participants and len(p_participants) > 0
 
-        # Garantir ID válido do estudante para plot
-        student_id = self.id if (self.selected_group == "students" and self.id is not None) else 0
-        if has_students and (student_id < 0 or student_id >= len(s_participants)):
-            student_id = 0
+        # Garantir ID válido do estudante para plot (apenas se for grupo de estudantes)
+        if self.selected_group == "students" and self.id is not None and has_students:
+            if 0 <= self.id < len(s_participants):
+                student_id = self.id
+            else:
+                student_id = None
+        else:
+            student_id = None
 
         if has_students:
-            def get_valid_mds(p_list, ph):
-                res = []
-                for p in p_list:
-                    mds = getattr(p, f"mds_result_{ph}")
-                    if mds and mds.X_aligned is not None:
-                        res.append(mds.X_aligned)
-                    else:
-                        if p.mds_result_pre and p.mds_result_pre.X_aligned is not None:
-                            res.append(p.mds_result_pre.X_aligned)
-                        else:
-                            num_concepts = len(self.dataset.headers)
-                            res.append(np.full((num_concepts, 2), np.nan))
-                return np.array(res)
-
-            self.mds_results_pre = get_valid_mds(s_participants, "pre")
-            self.mds_results_pos = get_valid_mds(s_participants, "pos")
-            
-            actual_phase = "pos" if self.phase == "pos" else "pre"
-            self.mds_results = self.mds_results_pos if self.phase == "pos" else self.mds_results_pre
+            self.mediator.compute_ranking_and_metrics()
+            self.mds_results_pre = self.mediator.mds_results_pre
+            self.mds_results_pos = self.mediator.mds_results_pos
+            self.mds_results = self.mediator.mds_results
+            ranked_indices = self.mediator.get_ranked_indices()
+            self.ranked_indices = ranked_indices
         else:
             self.mds_results_pre = None
             self.mds_results_pos = None
             self.mds_results = None
+            ranked_indices = []
+            self.ranked_indices = []
 
         p_centr_ref = self.dataset.centroids.get("professors") if self.dataset.centroids else None
         p_centroids = p_centr_ref.copy() if p_centr_ref is not None else None
-        
-        if has_students:
-            ranked_indices = self.get_ranked_indices(p_centroids)
-            
-            if self.ranked_indices != ranked_indices:
-                self.ranked_indices = ranked_indices
-                if self.dataset_mode == "group":
-                    self.event_generate("<<RankingUpdated>>")
-            else:
-                self.ranked_indices = ranked_indices
 
-            if self.ranking_mode_var.get() != "Todos os Alunos" and len(ranked_indices) > 0:
-                filtered_mds = self.mds_results[ranked_indices]
-                s_centroids = np.nanmean(filtered_mds, axis=0)
-                s_stds = np.nanstd(filtered_mds, axis=0)
-            else:
-                if len(self.mds_results) > 0:
-                    s_centroids = np.nanmean(self.mds_results, axis=0)
-                    s_stds = np.nanstd(self.mds_results, axis=0)
-                else:
-                    s_centroids = None
-                    s_stds = None
+        if has_students and len(ranked_indices) > 0:
+            filtered_mds = self.mds_results[ranked_indices]
+            s_centroids = np.nanmean(filtered_mds, axis=0)
+            s_stds = np.nanstd(filtered_mds, axis=0)
         else:
-            ranked_indices = []
             s_centroids = None
             s_stds = None
 
-        highlight   = self.tags[0].get()
-        destaque    = self.tags[1].get()
-        mean        = self.tags[2].get()
-        dispersion  = self.tags[3].get()
-        ellipsis    = self.tags[4].get()
+        highlight   = self.highlight_values.get()
+        destaque    = self.destaque_view_values.get()
+        mean        = self.mean_view_values.get()
+        dispersion  = self.dispersion_view_values.get()
+        ellipsis    = self.ellipse_view_values.get()
 
         # Selecionar Tudo / Caixas
         if hasattr(self, "concept_visibility"):
@@ -463,7 +454,7 @@ class VisualizationArea(ttk.Frame):
 
         if dispersion and has_students:
             curr_mds = self.mds_results[ranked_indices]
-        elif has_students:
+        elif has_students and student_id is not None:
             curr_mds = np.array([self.mds_results[student_id]])
         else:
             curr_mds = None
@@ -471,6 +462,8 @@ class VisualizationArea(ttk.Frame):
         # 1. Plot dos pontos dos alunos
         for i, scat in enumerate(self.scatters):
             visibility = has_students and self.concept_visibility[i].get() and (not self.s_mean_view.get() or dispersion)
+            if not dispersion and student_id is None and not self.s_mean_view.get():
+                visibility = False
             scat.set_visible(visibility)
 
             if visibility and curr_mds is not None:
@@ -510,37 +503,41 @@ class VisualizationArea(ttk.Frame):
         ]
 
         for i, txt in enumerate(self.concept_labels):
-            visibility = self.concept_visibility[i].get() and (
-                (destaque and has_students) or 
-                (self.s_mean_view.get() and s_centroids is not None) or 
-                (self.p_mean_view.get() and not has_students and p_centroids is not None)
-            )
-            txt.set_visible(visibility)
+            if not self.concept_visibility[i].get():
+                txt.set_visible(False)
+                continue
 
-            if visibility:
-                generic_name = self.dataset.concept_mapping.get(self.dataset.headers[i], f"C{i+1}")
-                txt.set_text(generic_name)
+            generic_name = self.dataset.concept_mapping.get(self.dataset.headers[i], f"C{i+1}")
+            txt.set_text(generic_name)
 
-                if self.s_mean_view.get() and s_centroids is not None:
-                    x, y = s_centroids[i, 0], s_centroids[i, 1]
-                elif not has_students and p_centroids is not None:
-                    x, y = p_centroids[i, 0], p_centroids[i, 1]
-                else:
-                    x, y = curr_mds[0, i, 0], curr_mds[0, i, 1]
+            x, y = None, None
+            if self.s_mean_view.get() and s_centroids is not None:
+                x, y = s_centroids[i, 0], s_centroids[i, 1]
+            elif student_id is not None:
+                if destaque and self.mds_results is not None:
+                    x, y = self.mds_results[student_id, i, 0], self.mds_results[student_id, i, 1]
+            elif p_centroids is not None and self.p_mean_view.get():
+                x, y = p_centroids[i, 0], p_centroids[i, 1]
 
-                collision_count = 0
-                for px, py in placed_positions:
-                    if np.sqrt((x - px)**2 + (y - py)**2) < proximity_threshold:
-                        collision_count += 1
-                
-                offset_idx = collision_count % len(offsets)
-                dx, dy = offsets[offset_idx]
-                
-                scaled_dx = dx * (plot_range / 10.0)
-                scaled_dy = dy * (plot_range / 10.0)
+            if x is None or y is None or np.isnan(x) or np.isnan(y):
+                txt.set_visible(False)
+                continue
 
-                txt.set_position((x + scaled_dx, y + scaled_dy))
-                placed_positions.append((x, y))
+            txt.set_visible(True)
+
+            collision_count = 0
+            for px, py in placed_positions:
+                if np.sqrt((x - px)**2 + (y - py)**2) < proximity_threshold:
+                    collision_count += 1
+            
+            offset_idx = collision_count % len(offsets)
+            dx, dy = offsets[offset_idx]
+            
+            scaled_dx = dx * (plot_range / 10.0)
+            scaled_dy = dy * (plot_range / 10.0)
+
+            txt.set_position((x + scaled_dx, y + scaled_dy))
+            placed_positions.append((x, y))
 
         # 5. Elipses de dispersão
         for i, ellipse in enumerate(self.ellipses):
@@ -559,13 +556,15 @@ class VisualizationArea(ttk.Frame):
             if self.concept_visibility[i].get():
                 if mean and p_centroids is not None:
                     pos_prof = p_centroids[i]
-                    if not self.s_mean_view.get() and has_students and curr_mds is not None:
-                        pos_dest = curr_mds[0, i] if not dispersion else self.mds_results[student_id, i]
-                        segmentos.append([pos_prof, pos_dest])
+                    if not self.s_mean_view.get() and has_students and student_id is not None:
+                        pos_dest = self.mds_results[student_id, i]
+                        if not (np.any(np.isnan(pos_prof)) or np.any(np.isnan(pos_dest))):
+                            segmentos.append([pos_prof, pos_dest])
 
                     if self.s_mean_view.get() and s_centroids is not None:
                         pos_stud = s_centroids[i]
-                        segmentos.append([pos_prof, pos_stud])
+                        if not (np.any(np.isnan(pos_prof)) or np.any(np.isnan(pos_stud))):
+                            segmentos.append([pos_prof, pos_stud])
 
         self.connection_lines.set_segments(segmentos)
         self.connection_lines.set_visible(len(segmentos) > 0)
@@ -577,7 +576,7 @@ class VisualizationArea(ttk.Frame):
             
             if self.s_mean_view.get():
                 if self.ranking_mode_var.get() != "Todos os Alunos" and len(ranked_indices) > 0:
-                    s_centr_pre = np.mean(self.mds_results_pre[ranked_indices], axis=0)
+                    s_centr_pre = np.nanmean(self.mds_results_pre[ranked_indices], axis=0)
                     s_centr_pos = s_centroids
                 else:
                     s_centr_pre = self.dataset.centroids.get("students_pre")
@@ -586,17 +585,16 @@ class VisualizationArea(ttk.Frame):
                 if s_centr_pre is not None and s_centr_pos is not None:
                     for i in range(self.num_concepts):
                         if self.concept_visibility[i].get():
-                            evo_segs.append([s_centr_pre[i], s_centr_pos[i]])
+                            if not (np.any(np.isnan(s_centr_pre[i])) or np.any(np.isnan(s_centr_pos[i]))):
+                                evo_segs.append([s_centr_pre[i], s_centr_pos[i]])
             else:
-                if dispersion:
+                if student_id is not None and self.selected_group == "students":
                     for i in range(self.num_concepts):
                         if self.concept_visibility[i].get():
-                            for j in ranked_indices:
-                                evo_segs.append([self.mds_results_pre[j, i], self.mds_results_pos[j, i]])
-                else:
-                    for i in range(self.num_concepts):
-                        if self.concept_visibility[i].get():
-                            evo_segs.append([self.mds_results_pre[student_id, i], self.mds_results_pos[student_id, i]])
+                            p_pre = self.mds_results_pre[student_id, i]
+                            p_pos = self.mds_results_pos[student_id, i]
+                            if not (np.any(np.isnan(p_pre)) or np.any(np.isnan(p_pos))):
+                                evo_segs.append([p_pre, p_pos])
             
             self.evo_lines.set_segments(evo_segs)
             self.evo_lines.set_visible(len(evo_segs) > 0)
@@ -611,7 +609,7 @@ class VisualizationArea(ttk.Frame):
                 new_colors = np.tile(face_color, (len(curr_mds), 1))
                 new_colors[:, 3] = 0.1
 
-                if destaque:
+                if destaque and student_id is not None:
                     if dispersion:
                         try:
                             highlight_idx = ranked_indices.index(student_id)
@@ -646,55 +644,15 @@ class VisualizationArea(ttk.Frame):
         self.winfo_toplevel().update()
         self.canvas.draw()
 
-    def get_ranked_indices(self, p_centroids):
-        mode = self.ranking_mode_var.get()
-        try:
-            n = self.ranking_n_var.get()
-        except tk.TclError:
-            n = 5
-            
-        num_students = len(self.mds_results)
-        all_indices = list(range(num_students))
-        
-        if mode == "Todos os Alunos" or p_centroids is None:
-            return all_indices
-            
-        distances = []
-        if mode in ["Top Alinhados", "Top Divergentes"]:
-            for j in range(num_students):
-                student_coords = self.mds_results[j]
-                if student_coords.shape == p_centroids.shape:
-                    dist = np.sum(np.linalg.norm(student_coords - p_centroids, axis=1))
-                    distances.append(dist)
-                else:
-                    distances.append(np.inf if mode == "Top Alinhados" else -np.inf)
-                
-            sorted_indices = np.argsort(distances)
-            if mode == "Top Divergentes":
-                sorted_indices = sorted_indices[::-1]
-            return sorted_indices[:n].tolist()
-            
-        elif mode == "Top Evolução":
-            if self.mds_results_pre is None or self.mds_results_pos is None:
-                return all_indices
-                
-            for j in range(num_students):
-                student_coords_pre = self.mds_results_pre[j]
-                student_coords_pos = self.mds_results_pos[j]
-                if student_coords_pre.shape == p_centroids.shape and student_coords_pos.shape == p_centroids.shape:
-                    dist_pre = np.sum(np.linalg.norm(student_coords_pre - p_centroids, axis=1))
-                    dist_pos = np.sum(np.linalg.norm(student_coords_pos - p_centroids, axis=1))
-                    distances.append(dist_pre - dist_pos)
-                else:
-                    distances.append(-np.inf)
-                
-            sorted_indices = np.argsort(distances)[::-1]
-            return sorted_indices[:n].tolist()
+    def get_ranked_indices(self) -> list[int]:
+        return self.mediator.get_ranked_indices()
 
     def set_index(self, idx: int, phase: str = "pre", status: str = "default", group: str = "students") -> None:
         self.id = idx
         self.phase = phase
         self.selected_group = group
+        self.mediator.selected_id = idx
+        self.mediator.selected_group = group
 
         if status == "default":
             self.s_mean_view.set(False)
@@ -736,8 +694,3 @@ class VisualizationArea(ttk.Frame):
                 self.sheet.refresh()
         except Exception:
             pass
-
-    def set_mode(self, mode: str) -> None:
-        self.dataset_mode = mode
-        self.id = 0
-        self.refresh()

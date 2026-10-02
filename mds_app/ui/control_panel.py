@@ -9,26 +9,31 @@ from mds_app.data.participant import Participant
 from mds_app.ui.participant_manager_window import ParticipantManagerWindow
 
 class ControlPanel(ttk.Frame):
-    def __init__(self, parent, dataset: Dataset, visualization_area, mode: str = "group") -> None:
+    def __init__(self, parent, mediator, mode: str = "group") -> None:
         super().__init__(parent)
-        self.dataset = dataset
-        self.visualization_area = visualization_area
-        self.dataset_mode = mode
+
+        if hasattr(mediator, "dataset"):
+            self.mediator = mediator
+            self.dataset = mediator.dataset
+            self.dataset_mode = mediator.mode
+        else:
+            from mds_app.ui.analysis_mediator import AnalysisMediator
+            self.dataset = mediator
+            self.dataset_mode = mode
+            self.mediator = AnalysisMediator(self.dataset, mode=mode)
+
+        self.mediator.register_control_panel(self)
         self.main_window = None
 
         self.selected_participant: Participant | None = None
         self.selected_group: str = "students"
         self.tree: ttk.Treeview | None = None
 
-        # Variáveis globais
-        self.phase_var = tk.StringVar(value="pre")
-        self.radio_var = tk.StringVar(value="default")
+        # Variáveis globais vinculadas ao mediador
+        self.phase_var = self.mediator.phase_var
+        self.radio_var = self.mediator.radio_var
 
         self._create_widgets()
-        
-        # Escutar atualizações de ranking (apenas no modo de grupo)
-        if self.dataset_mode == "group":
-            self.visualization_area.bind("<<RankingUpdated>>", self._on_ranking_updated)
 
 
     def _create_widgets(self) -> None:
@@ -82,7 +87,7 @@ class ControlPanel(ttk.Frame):
 
         self.tree = ttk.Treeview(
             self.tree_frame,
-            columns=("Classif", "Nome", "Grupo", "Nivel", "Pos", "Stress", "Metrica"),
+            columns=("Classif", "Nome", "Grupo", "Nivel", "Pre", "Pos", "Stress", "Metrica"),
             show="headings",
             height=6,
             yscrollcommand=tree_y_scroll.set,
@@ -97,18 +102,23 @@ class ControlPanel(ttk.Frame):
         self.tree.heading("Nome", text="Nome")
         self.tree.heading("Grupo", text="Grupo")
         self.tree.heading("Nivel", text="Nível")
+        self.tree.heading("Pre", text="Pré?")
         self.tree.heading("Pos", text="Pós?")
         self.tree.heading("Stress", text="Stress")
         self.tree.heading("Metrica", text="-")
 
         # Ajustar larguras
-        self.tree.column("Classif", width=40, anchor="center")
-        self.tree.column("Nome", width=85, anchor="w")
-        self.tree.column("Grupo", width=65, anchor="center")
-        self.tree.column("Nivel", width=55, anchor="center")
-        self.tree.column("Pos", width=45, anchor="center")
+        self.tree.column("Classif", width=35, anchor="center")
+        self.tree.column("Nome", width=80, anchor="w")
+        self.tree.column("Grupo", width=60, anchor="center")
+        self.tree.column("Nivel", width=50, anchor="center")
+        self.tree.column("Pre", width=42, anchor="center")
+        self.tree.column("Pos", width=42, anchor="center")
         self.tree.column("Stress", width=45, anchor="center")
-        self.tree.column("Metrica", width=65, anchor="center")
+        self.tree.column("Metrica", width=60, anchor="center")
+
+        # Estilo para professores (visual diferenciado / atenuado)
+        self.tree.tag_configure("professor", foreground="#7f8c8d")
 
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", self._on_tree_double_click)
@@ -187,36 +197,36 @@ class ControlPanel(ttk.Frame):
 
         self.chk_destaque = ttk.Checkbutton(
             plot_opts_frame, text="Visualizar em destaque", 
-            variable=self.visualization_area.destaque_view_values,
-            command=self.visualization_area.show_mds
+            variable=self.mediator.destaque_view_values,
+            command=self.mediator.request_plot_update
         )
         self.chk_destaque.pack(anchor="w", pady=2)
 
         self.chk_mean = ttk.Checkbutton(
             plot_opts_frame, text="Visualizar gabarito", 
-            variable=self.visualization_area.mean_view_values,
-            command=self.visualization_area.show_mds
+            variable=self.mediator.mean_view_values,
+            command=self.mediator.request_plot_update
         )
         self.chk_mean.pack(anchor="w", pady=2)
 
         self.chk_dispersion = ttk.Checkbutton(
             plot_opts_frame, text="Visualizar dispersão", 
-            variable=self.visualization_area.dispersion_view_values,
-            command=self.visualization_area.show_mds
+            variable=self.mediator.dispersion_view_values,
+            command=self.mediator.request_plot_update
         )
         self.chk_dispersion.pack(anchor="w", pady=2)
 
         self.chk_ellipse = ttk.Checkbutton(
             plot_opts_frame, text="Visualizar zona de dispersão", 
-            variable=self.visualization_area.ellipse_view_values,
-            command=self.visualization_area.show_mds
+            variable=self.mediator.ellipse_view_values,
+            command=self.mediator.request_plot_update
         )
         self.chk_ellipse.pack(anchor="w", pady=2)
 
         self.chk_evo = ttk.Checkbutton(
             plot_opts_frame, text="Visualizar evolução", 
-            variable=self.visualization_area.evo_view_values,
-            command=self.visualization_area.show_mds
+            variable=self.mediator.evo_view_values,
+            command=self.mediator.request_plot_update
         )
         self.chk_evo.pack(anchor="w", pady=2)
 
@@ -228,7 +238,7 @@ class ControlPanel(ttk.Frame):
 
         self.ranking_combo = ttk.Combobox(
             ranking_frame, 
-            textvariable=self.visualization_area.ranking_mode_var,
+            textvariable=self.mediator.ranking_mode_var,
             values=["Todos os Alunos", "Top Alinhados", "Top Divergentes", "Top Evolução"],
             state="readonly"
         )
@@ -242,11 +252,11 @@ class ControlPanel(ttk.Frame):
 
         self.ranking_spin = ttk.Spinbox(
             spin_frame, from_=1, to=100, width=5, 
-            textvariable=self.visualization_area.ranking_n_var,
-            command=self.visualization_area.show_mds
+            textvariable=self.mediator.ranking_n_var,
+            command=self.mediator.on_ranking_changed
         )
         self.ranking_spin.pack(side="right")
-        self.ranking_spin.bind("<Return>", lambda e: self.visualization_area.show_mds())
+        self.ranking_spin.bind("<Return>", lambda e: self.mediator.on_ranking_changed())
         self.ranking_spin.bind("<KeyRelease>", lambda e: self._on_spinbox_keyrelease())
 
         # ----------------------------------------------------
@@ -334,18 +344,9 @@ class ControlPanel(ttk.Frame):
             self._populate_tree()
 
             # 3. Atualizar estados dos botões
-            total_de_linhas = len(self.tree.get_children())
-            if total_de_linhas <= 0:
-                self.btn_edit.configure(state="disabled")
-                self.btn_delete.configure(state="disabled")
-                
-            selected = self.tree.selection()
-            if selected:
-                self.btn_edit.configure(state="normal")
-                self.btn_delete.configure(state="normal")
-            else:
-                self.btn_edit.configure(state="disabled")
-                self.btn_delete.configure(state="disabled")
+            btn_state = "normal" if self.tree.selection() else "disabled"
+            self.btn_edit.configure(state=btn_state)
+            self.btn_delete.configure(state=btn_state)
 
             # 4. Habilitar/desabilitar checkboxes do plot conforme o status dos dados
             self._update_plot_checkbox_states()
@@ -383,14 +384,9 @@ class ControlPanel(ttk.Frame):
 
         # 1. Alunos
         students = self.dataset.participants.get("students", [])
-        
-        ranked_indices = []
-        if hasattr(self.visualization_area, "ranked_indices") and self.visualization_area.ranked_indices is not None:
-            ranked_indices = self.visualization_area.ranked_indices
-        else:
-            ranked_indices = list(range(len(students)))
 
-        ranking_mode = self.visualization_area.ranking_mode_var.get() if hasattr(self.visualization_area, "ranking_mode_var") else "Todos os Alunos"
+        ranked_indices, alignment_ranks, metric_values = self.mediator.get_ranking_data()
+        ranking_mode = self.mediator.ranking_mode_var.get()
 
         # Atualizar o cabeçalho da coluna Metrica
         if ranking_mode in ["Top Alinhados", "Top Divergentes"]:
@@ -400,57 +396,18 @@ class ControlPanel(ttk.Frame):
         else:
             self.tree.heading("Metrica", text="-")
 
-        # Calcular os rankings absolutos de alinhamento e as métricas de exibição
-        alignment_ranks = {}
-        metric_values = {}
-        
-        p_centr_ref = self.dataset.centroids.get("professors") if self.dataset.centroids else None
-        if hasattr(self.visualization_area, "mds_results") and self.visualization_area.mds_results is not None:
-            if p_centr_ref is not None and len(self.visualization_area.mds_results) == len(students):
-                distances = []
-                for j in range(len(students)):
-                    student_coords = self.visualization_area.mds_results[j]
-                    if not np.any(np.isnan(student_coords)) and not np.any(np.isnan(p_centr_ref)):
-                        if student_coords.shape == p_centr_ref.shape:
-                            dist = np.sum(np.linalg.norm(student_coords - p_centr_ref, axis=1))
-                            distances.append((dist, j))
-                            if ranking_mode in ["Top Alinhados", "Top Divergentes"]:
-                                metric_values[j] = f"{dist:.2f}"
-                
-                # Ordenar por menor distância (mais alinhado)
-                distances.sort(key=lambda x: x[0])
-                for rank_pos, (dist, original_idx) in enumerate(distances):
-                    alignment_ranks[original_idx] = rank_pos + 1
-
-        if ranking_mode == "Top Evolução" and p_centr_ref is not None:
-            mds_pre = getattr(self.visualization_area, "mds_results_pre", None)
-            mds_pos = getattr(self.visualization_area, "mds_results_pos", None)
-            if mds_pre is not None and mds_pos is not None:
-                for j in range(len(students)):
-                    pre_coords = mds_pre[j]
-                    pos_coords = mds_pos[j]
-                    if (pre_coords.shape == p_centr_ref.shape and 
-                        pos_coords.shape == p_centr_ref.shape and 
-                        not np.any(np.isnan(pre_coords)) and 
-                        not np.any(np.isnan(pos_coords)) and
-                        not np.any(np.isnan(p_centr_ref))):
-                        
-                        dist_pre = np.sum(np.linalg.norm(pre_coords - p_centr_ref, axis=1))
-                        dist_pos = np.sum(np.linalg.norm(pos_coords - p_centr_ref, axis=1))
-                        evo = dist_pre - dist_pos
-                        metric_values[j] = f"{evo:+.2f}"
-
         for rank_pos, idx in enumerate(ranked_indices):
             if idx >= len(students):
                 continue
             p = students[idx]
             # Stress
             stress_val = "-"
-            mds_res = getattr(p, f"mds_result_{phase}")
+            mds_res = getattr(p, f"mds_result_{phase}", None)
             if mds_res and mds_res.stress is not None:
                 stress_val = f"{mds_res.stress:.3f}"
 
-            has_pos = "Sim" if p.dataframe_pos is not None else "Não"
+            has_pre = "Sim" if (p.dataframe_pre is not None and not p.dataframe_pre.isna().all().all()) else "Não"
+            has_pos = "Sim" if (p.dataframe_pos is not None and not p.dataframe_pos.isna().all().all()) else "Não"
             
             # Exibe o rank absoluto apenas nos modos Top Alinhados e Top Divergentes.
             # Omitimos ("-") em Todos os Alunos e Top Evolução.
@@ -465,24 +422,28 @@ class ControlPanel(ttk.Frame):
                 "",
                 "end",
                 iid=f"student_{idx}",
-                values=(classif_val, p.name, p.group, p.familiarity_level, has_pos, stress_val, metric_val)
+                values=(classif_val, p.name, p.group, p.familiarity_level, has_pre, has_pos, stress_val, metric_val)
             )
 
         # 2. Professores
         professors = self.dataset.participants.get("professors", [])
         for i, p in enumerate(professors):
-            # Professores usam pós se tiverem, senão pré
+            # Professores usam fase selecionada se disponível, senão fallback
             stress_val = "-"
-            mds_res = p.mds_result_pos if p.dataframe_pos is not None else p.mds_result_pre
+            mds_res = getattr(p, f"mds_result_{phase}", None)
+            if not mds_res or mds_res.stress is None:
+                mds_res = p.mds_result_pos if p.dataframe_pos is not None else p.mds_result_pre
             if mds_res and mds_res.stress is not None:
                 stress_val = f"{mds_res.stress:.3f}"
 
-            has_pos = "Sim" if p.dataframe_pos is not None else "Não"
+            has_pre = "Sim" if (p.dataframe_pre is not None and not p.dataframe_pre.isna().all().all()) else "Não"
+            has_pos = "Sim" if (p.dataframe_pos is not None and not p.dataframe_pos.isna().all().all()) else "Não"
             self.tree.insert(
                 "",
                 "end",
                 iid=f"professor_{i}",
-                values=("-", p.name, p.group, p.familiarity_level, has_pos, stress_val, "-")
+                values=("-", p.name, p.group, p.familiarity_level, has_pre, has_pos, stress_val, "-"),
+                tags=("professor",)
             )
 
         # Tentar re-selecionar o participante selecionado
@@ -511,30 +472,30 @@ class ControlPanel(ttk.Frame):
 
         # Destaque
         if not status == "default":
-            self.visualization_area.destaque_view_values.set(False)
+            self.mediator.destaque_view_values.set(False)
             self.chk_destaque.state(["alternate", "disabled"])
         else:
-            self.visualization_area.destaque_view_values.set(True)
+            self.mediator.destaque_view_values.set(True)
             self.chk_destaque.state(["!alternate", "!disabled"])
 
         # Gabarito
         if not has_professors:
-            self.visualization_area.mean_view_values.set(False)
+            self.mediator.mean_view_values.set(False)
             self.chk_mean.state(["disabled"])
         else:
             self.chk_mean.state(["!disabled"])
 
         # Evolução
         if not has_professors or not has_students or phase == "pre":
-            self.visualization_area.evo_view_values.set(False)
+            self.mediator.evo_view_values.set(False)
             self.chk_evo.state(["alternate","disabled"])
         else:
             self.chk_evo.state(["!alternate", "!disabled"])
 
         # Dispersão
         if not has_students:
-            self.visualization_area.dispersion_view_values.set(False)
-            self.visualization_area.ellipse_view_values.set(False)
+            self.mediator.dispersion_view_values.set(False)
+            self.mediator.ellipse_view_values.set(False)
             self.chk_dispersion.state(["disabled"])
             self.chk_ellipse.state(["disabled"])
         else:
@@ -543,22 +504,22 @@ class ControlPanel(ttk.Frame):
     
 
     def atualizar_estado_ranking(self):
-        if self.visualization_area.ranking_mode_var.get() == "Todos os Alunos":
+        if self.mediator.ranking_mode_var.get() == "Todos os Alunos":
             self.ranking_spin.state(['disabled'])
             self.quantidade_label.config(foreground="gray")
         else:
             self.ranking_spin.state(['!disabled'])
             self.quantidade_label.config(foreground="")
 
-        self.visualization_area.show_mds()
+        self.mediator.on_ranking_changed()
 
 
     def _on_spinbox_keyrelease(self) -> None:
         try:
             val = self.ranking_spin.get()
             if val.isdigit():
-                self.visualization_area.ranking_n_var.set(int(val))
-                self.visualization_area.show_mds()
+                self.mediator.ranking_n_var.set(int(val))
+                self.mediator.on_ranking_changed()
         except Exception:
             pass
 
@@ -571,11 +532,13 @@ class ControlPanel(ttk.Frame):
             ttk.Label(self.concept_frame, text="Nenhum conceito ativo", foreground="gray").pack(pady=5)
             return
 
+        self.mediator.sync_concept_visibility()
+
         # Checkbox "Selecionar Tudo"
         self.all_chk = ttk.Checkbutton(
             self.concept_frame,
             text="Selecionar Tudo",
-            variable=self.visualization_area.all_selection_values,
+            variable=self.mediator.all_selection_values,
             command=self._select_all_concepts
         )
         self.all_chk.pack(anchor="w", pady=(0, 5))
@@ -592,32 +555,27 @@ class ControlPanel(ttk.Frame):
             chk = ttk.Checkbutton(
                 self.concept_frame,
                 text=display_text,
-                variable=self.visualization_area.concept_visibility[i],
+                variable=self.mediator.concept_visibility[i],
                 command=self._select_concept
             )
             chk.pack(anchor="w", pady=1, padx=(10, 0))
             
 
     def _select_all_concepts(self) -> None:
-        val = self.visualization_area.all_selection_values.get()
-        if hasattr(self.visualization_area, "concept_visibility"):
-            for visibility in self.visualization_area.concept_visibility:
-                visibility.set(val)
-        self.visualization_area.show_mds()
+        val = self.mediator.all_selection_values.get()
+        self.mediator.toggle_all_concepts(val)
 
 
     def _select_concept(self) -> None:
-        self.visualization_area.show_mds()
+        self.mediator.on_concept_visibility_changed()
 
-        if hasattr(self.visualization_area, "concept_visibility"):
-            count_visible = np.array([v.get() for v in self.visualization_area.concept_visibility])
-            
-            if np.all(count_visible):
-                self.all_chk.state(['!alternate'])
-            elif np.all(count_visible == False):
-                self.all_chk.state(['!alternate'])
-            else:
-                self.all_chk.state(['alternate'])
+        count_visible = [v.get() for v in self.mediator.concept_visibility]
+        if all(count_visible):
+            self.all_chk.state(['!alternate'])
+        elif not any(count_visible):
+            self.all_chk.state(['!alternate'])
+        else:
+            self.all_chk.state(['alternate'])
             
 
     def _on_global_change(self) -> None:
@@ -645,13 +603,13 @@ class ControlPanel(ttk.Frame):
         # Ajusta os filtros de acordo com a fase:
         if phase == "pre":
             self.ranking_combo["values"] = ["Todos os Alunos", "Top Alinhados", "Top Divergentes"]
-            if self.visualization_area.ranking_mode_var.get() == "Top Evolução":
-                self.visualization_area.ranking_mode_var.set("Todos os Alunos")
+            if self.mediator.ranking_mode_var.get() == "Top Evolução":
+                self.mediator.ranking_mode_var.set("Todos os Alunos")
                 self.atualizar_estado_ranking()
         if phase == "pos":
             self.ranking_combo["values"] = ["Todos os Alunos", "Top Alinhados", "Top Divergentes", "Top Evolução"]
 
-        self.visualization_area.set_index(idx, phase, status, group=group)
+        self.mediator.select_participant(idx, group=group, phase=phase, status=status)
         self.refresh()
 
 
@@ -679,20 +637,12 @@ class ControlPanel(ttk.Frame):
         phase = self.phase_var.get()
         status = self.radio_var.get()
         
-        self.visualization_area.set_index(idx, phase, status, group=self.selected_group)
+        self.mediator.select_participant(idx, group=self.selected_group, phase=phase, status=status)
 
 
     def _on_tree_double_click(self, event=None) -> None:
         # Abrir gerenciador no participante duplo-clicado
         self.edit_participant()
-
-
-    def _on_ranking_updated(self, event=None) -> None:
-        # Quando a área de visualização atualiza a ordenação de alunos pelo ranking,
-        # atualiza a Treeview para destacar o ranking
-        if self.dataset_mode == "group" and hasattr(self, "tree") and self.tree is not None:
-            if hasattr(self.visualization_area, "ranked_indices"):
-                self._populate_tree()
 
 
     # ----------------------------------------------------
@@ -744,14 +694,7 @@ class ControlPanel(ttk.Frame):
                 p.add_dataframe(result["df_pos"], "pos")
 
             self.dataset.add_participants([p])
-            self.dataset.calc_mean()
-
-            # Forçar inicialização dos plots
-            self.visualization_area.create_dataframe()
-            self.visualization_area.create_mds()
-
-            self.refresh()
-            self.visualization_area.refresh()
+            self.mediator.notify_data_changed()
             if self.main_window and self.main_window.toolbar:
                 self.main_window.toolbar.set_mode(self.main_window.current_mode)
 
@@ -799,12 +742,7 @@ class ControlPanel(ttk.Frame):
                     self.dataset.participants[old_key].remove(p)
                 self.dataset.participants[new_key].append(p)
 
-            self.dataset.calc_mean()
-
-            self.visualization_area.create_dataframe()
-            self.visualization_area.create_mds()
-            self.refresh()
-            self.visualization_area.refresh()
+            self.mediator.notify_data_changed()
             if self.main_window and self.main_window.toolbar:
                 self.main_window.toolbar.set_mode(self.main_window.current_mode)
 
@@ -842,14 +780,9 @@ class ControlPanel(ttk.Frame):
             if self.main_window:
                 self.main_window.clear_dataset()
             else:
-                self.dataset.clear()
-                self.refresh()
-                self.visualization_area.refresh()
+                self.mediator.clear_dataset()
         else:
-            self.visualization_area.create_dataframe()
-            self.visualization_area.create_mds()
-            self.refresh()
-            self.visualization_area.refresh()
+            self.mediator.notify_data_changed()
             if self.main_window and self.main_window.toolbar:
                 self.main_window.toolbar.set_mode(self.main_window.current_mode)
 
@@ -888,12 +821,7 @@ class ControlPanel(ttk.Frame):
                 self.dataset.set_new_participants([p])
                 self.dataset.set_headers(final_headers)
                 self.dataset.set_selected_headers(final_headers)
-                self.dataset.calc_mean()
-
-                self.visualization_area.create_dataframe()
-                self.visualization_area.create_mds()
-                self.refresh()
-                self.visualization_area.refresh()
+                self.mediator.notify_data_changed()
                 if self.main_window:
                     self.main_window.root.update()
                     self.main_window.main_paned.sash_place(0, 300, 0)
@@ -955,12 +883,7 @@ class ControlPanel(ttk.Frame):
             p.mds_result_pre.fit(df_mat)
 
             self.dataset.update_all_headers(final_headers)
-            self.dataset.calc_mean()
-
-            self.visualization_area.create_dataframe()
-            self.visualization_area.create_mds()
-            self.refresh()
-            self.visualization_area.refresh()
+            self.mediator.notify_data_changed()
 
             dialog.destroy()
 
@@ -997,10 +920,4 @@ class ControlPanel(ttk.Frame):
 
     @property
     def filtered_indices(self) -> list[int]:
-        if hasattr(self.visualization_area, "ranked_indices"):
-            return self.visualization_area.ranked_indices
-        return []
-
-
-    def _enable_ctrl(self) -> None:
-        self._on_global_change()
+        return self.mediator.get_ranked_indices()

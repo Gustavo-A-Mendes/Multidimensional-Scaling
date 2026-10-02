@@ -3,25 +3,23 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from typing import Union, TYPE_CHECKING
-
 from mds_app.ui.group_mapping_window import GroupMappingWindow
-from mds_app.ui.import_dialog import ImportDialog
 from mds_app.utils.csv_loader import *
 from mds_app.utils.validators import *
 from mds_app.ui.export_window import ExportWindow
 
-# if TYPE_CHECKING:
+from mds_app.data.dataset import Dataset
 from mds_app.ui.control_panel import ControlPanel
 from mds_app.ui.visualization_area import VisualizationArea
 
 class ToolBar(ttk.Frame):
-    def __init__(self, parent, dataset: Dataset, control_panel: ControlPanel, visualization_area: VisualizationArea) -> None:
+    def __init__(self, parent, dataset: Dataset, control_panel: ControlPanel, visualization_area: VisualizationArea, mediator=None) -> None:
         super().__init__(parent)
         self.parent = parent
         self.dataset = dataset
         self.control_panel = control_panel
         self.visualization_area = visualization_area
+        self.mediator = mediator if mediator else getattr(control_panel, "mediator", None)
         self.dataset_mode = "group"
         self.main_window = None
 
@@ -110,6 +108,17 @@ class ToolBar(ttk.Frame):
             self.mode_var.set("Análise de Matriz Única")
             self.btn_import_single.pack(side="left", padx=5)
 
+    def _center_window(self, window: tk.Toplevel, width: int = None, height: int = None) -> None:
+        """Centraliza uma janela Toplevel em relação à janela principal."""
+        window.update_idletasks()
+        root_window = self.winfo_toplevel()
+        root_window.update_idletasks()
+        w = width or window.winfo_width()
+        h = height or window.winfo_height()
+        x = root_window.winfo_rootx() + (root_window.winfo_width() - w) // 2
+        y = root_window.winfo_rooty() + (root_window.winfo_height() - h) // 2
+        window.geometry(f"{w}x{h}+{x}+{y}")
+
     def import_single_matrix(self) -> None:
         if self.dataset.participants:
             confirm = messagebox.askyesno(
@@ -156,24 +165,7 @@ class ToolBar(ttk.Frame):
                     choose_win.transient(self)
                     choose_win.grab_set()
                     
-                    # Centralizar na tela em relação ao pai
-                    choose_win.update_idletasks()
-
-                    root_window = self.winfo_toplevel()
-                    root_window.update_idletasks()
-
-                    root_x = root_window.winfo_rootx()
-                    root_y = root_window.winfo_rooty()
-                    root_width = root_window.winfo_width()
-                    root_height = root_window.winfo_height()
-
-                    w = choose_win.winfo_width()
-                    h = choose_win.winfo_height()
-
-                    x = root_x + (root_width - w) // 2
-                    y = root_y + (root_height - h) // 2
-                    choose_win.geometry(f"{w}x{h}+{x}+{y}")
-
+                    self._center_window(choose_win, 350, 180)
                     choose_win.deiconify()
                     
                     ttk.Label(choose_win, text="O arquivo contém múltiplos participantes.\nSelecione qual deseja visualizar na Matriz Única:", justify="center").pack(pady=10)
@@ -261,8 +253,7 @@ class ToolBar(ttk.Frame):
                 for h in final_headers:
                     df_mat.at[h, h] = 0.0
                 
-                # se houver mais conceitos, abre a janela de edição da matriz antes de salvar:
-                # if (new_set != old_set) or (len(final_headers) > len(headers)):
+                # Se houver mais conceitos, abre a janela de edição da matriz antes de salvar:
                 dialog_matrix = ManualInputWindow(self, final_headers, on_confirm_matrix, df_mat, title="Preencher Matriz Única")
                 self.wait_window(dialog_matrix)
 
@@ -270,21 +261,19 @@ class ToolBar(ttk.Frame):
                     return
 
                 p.dataframe_pre = df_mat
-                # else:
-                #     df_mat.columns = new_headers
-                #     df_mat.index = new_headers
-                
                 p.mds_result_pre.fit(df_mat)
 
                 self.dataset.set_new_participants([p])
                 self.dataset.set_headers(final_headers)
                 self.dataset.set_selected_headers(final_headers)
-                self.dataset.calc_mean()
-
-                self.visualization_area.create_dataframe()
-                self.visualization_area.create_mds()
-                self.control_panel.refresh()
-                self.visualization_area.refresh()
+                if hasattr(self, "mediator") and self.mediator:
+                    self.mediator.notify_data_changed()
+                else:
+                    self.dataset.calc_mean()
+                    self.visualization_area.create_dataframe()
+                    self.visualization_area.create_mds()
+                    self.control_panel.refresh()
+                    self.visualization_area.refresh()
                 if self.main_window:
                     self.main_window.root.update()
                     self.main_window.main_paned.sash_place(0, 300, 0)
@@ -380,33 +369,19 @@ class ToolBar(ttk.Frame):
                 messagebox.showerror("Erro", "Nenhuma informação válida encontrada.")
                 return
 
-            # def on_confirm(new_headers: list[str]) -> None:
-            #     self.dataset.set_selected_headers(new_headers)
-            #
-            #     # show first participant
-            #     self.visualization_area.show_dataframe(self.dataset, index=0)
-            #
-            #     self.control_panel.refresh()
-            #
-            # dialog = ImportDialog(self, headers, on_confirm)
-            # self.wait_window(dialog)
             self.dataset.set_selected_headers(headers)
 
-            self.dataset.calc_mean()
-
-            self.visualization_area.create_dataframe()
-            self.visualization_area.create_mds()
-
-            self.control_panel.refresh()
-            
-            if phase == "Pré-teste":
-                self.control_panel.phase_var.set("pre")
+            phase_code = "pre" if phase == "Pré-teste" else "pos"
+            if hasattr(self, "mediator") and self.mediator:
+                self.mediator.phase_var.set(phase_code)
+                self.mediator.notify_data_changed()
             else:
-                self.control_panel.phase_var.set("pos")
-                
-            self.control_panel._enable_ctrl() # força a UI a ler o novo valor de phase_var
-
-            self.visualization_area.refresh()
+                self.dataset.calc_mean()
+                self.visualization_area.create_dataframe()
+                self.visualization_area.create_mds()
+                self.control_panel.refresh()
+                self.control_panel.phase_var.set(phase_code)
+                self.visualization_area.refresh()
 
             # Forçar o sash_place após a renderização do gráfico
             if self.main_window:
@@ -424,7 +399,6 @@ class ToolBar(ttk.Frame):
                 if confirm_pos:
                     self.import_csv(phase="Pós-teste")
 
-
         except Exception as e:
             messagebox.showerror("Erro ao importar CSV", str(e))
 
@@ -435,19 +409,7 @@ class ToolBar(ttk.Frame):
         dialog.transient(self)
         dialog.grab_set()
 
-        # Centralizar na tela em relação ao pai
-        dialog.update_idletasks()
-        root_window = self.winfo_toplevel()
-        root_window.update_idletasks()
-        root_x = root_window.winfo_rootx()
-        root_y = root_window.winfo_rooty()
-        root_width = root_window.winfo_width()
-        root_height = root_window.winfo_height()
-        w = 380
-        h = 150
-        x = root_x + (root_width - w) // 2
-        y = root_y + (root_height - h) // 2
-        dialog.geometry(f"{w}x{h}+{x}+{y}")
+        self._center_window(dialog, 380, 150)
 
         ttk.Label(
             dialog,
@@ -501,7 +463,10 @@ class ToolBar(ttk.Frame):
     # Na sua classe principal App:
     def abrir_exportacao(self):
         # Passa o self.dataset ou objeto que contém os dados processados
-        filtered = getattr(self.control_panel, "filtered_indices", None)
+        if hasattr(self, "mediator") and self.mediator:
+            filtered = self.mediator.get_ranked_indices()
+        else:
+            filtered = getattr(self.control_panel, "filtered_indices", None)
         export_dialog = ExportWindow(self, self.dataset, filtered)
         self.wait_window(export_dialog)
 
