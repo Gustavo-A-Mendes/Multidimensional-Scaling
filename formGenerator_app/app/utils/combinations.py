@@ -8,6 +8,8 @@ def generate_pairs(concepts):
 
 def gerar_divisao_secao(total_pair):
     max_per_secao = 10
+    if total_pair <= 0:
+        return 1
 
     num_secao = ceil(total_pair / max_per_secao)
     num_per_secao = ceil(total_pair / num_secao)

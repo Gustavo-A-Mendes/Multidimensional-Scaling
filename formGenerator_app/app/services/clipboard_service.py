@@ -2,5 +2,8 @@ import pyperclip
 
 
 def copy(text):
-
-    pyperclip.copy(text)
+    try:
+        pyperclip.copy(text)
+        return True
+    except Exception:
+        return False
