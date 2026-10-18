@@ -622,8 +622,6 @@ class VisualizationArea(ttk.Frame):
                 scat.set_facecolor(new_colors)
                 scat.set_edgecolor(new_colors)
 
-        self.ax.set_xlabel("Dimensão 1")
-        self.ax.set_ylabel("Dimensão 2")
         self.ax.grid(True, linestyle='--', alpha=0.5)
 
         self.ax.set_xlim(limite)
