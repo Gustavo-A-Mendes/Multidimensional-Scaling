@@ -7,7 +7,14 @@ import ttkbootstrap as ttk
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 
-from formGenerator_app.app.services.auth_service import authenticate, try_auto_login, get_user_info, logout_service, cancel_login
+from formGenerator_app.app.services.auth_service import (
+    authenticate,
+    try_auto_login,
+    get_user_info,
+    logout_service,
+    cancel_login,
+    InsufficientPermissionsError
+)
 from formGenerator_app.app.services.forms_service import create_forms
 from formGenerator_app.app.services.clipboard_service import copy
 
@@ -143,7 +150,7 @@ class MainWindow:
         
         pre_btns = ttk.Frame(pre_frame)
         pre_btns.pack(anchor="e")
-        ttk.Button(pre_btns, text="Copiar Link", bootstyle="info-outline", command=lambda: copy(self.pre_url) if self.pre_url else None).pack(side="left", padx=5)
+        ttk.Button(pre_btns, text="Copiar Link", bootstyle="info-outline", command=lambda: self._copy_link(self.pre_url, "Pré-aulas")).pack(side="left", padx=5)
         ttk.Button(pre_btns, text="Abrir no Navegador", bootstyle="secondary-outline", command=lambda: webbrowser.open(self.pre_url) if self.pre_url else None).pack(side="left")
 
         # Pós-teste
@@ -155,9 +162,16 @@ class MainWindow:
         
         pos_btns = ttk.Frame(pos_frame)
         pos_btns.pack(anchor="e")
-        ttk.Button(pos_btns, text="Copiar Link", bootstyle="info-outline", command=lambda: copy(self.pos_url) if self.pos_url else None).pack(side="left", padx=5)
+        ttk.Button(pos_btns, text="Copiar Link", bootstyle="info-outline", command=lambda: self._copy_link(self.pos_url, "Pós-aulas")).pack(side="left", padx=5)
         ttk.Button(pos_btns, text="Abrir no Navegador", bootstyle="secondary-outline", command=lambda: webbrowser.open(self.pos_url) if self.pos_url else None).pack(side="left")
 
+    def _copy_link(self, url, name):
+        if not url:
+            return
+        if copy(url):
+            messagebox.showinfo("Link Copiado", f"Link do formulário ({name}) copiado para a área de transferência!")
+        else:
+            messagebox.showwarning("Aviso", "Não foi possível copiar automaticamente para a área de transferência. Selecione e copie o link manualmente.")
 
     def login(self):
         try:
@@ -166,15 +180,46 @@ class MainWindow:
             user = get_user_info(self.creds)
 
             self.window.after(0, lambda: self._on_login_success(user, is_manual=True))
+        except InsufficientPermissionsError as e:
+            self.window.after(0, lambda: self._on_insufficient_permissions(e))
+        except FileNotFoundError as e:
+            self.window.after(0, lambda: messagebox.showerror(
+                "Credenciais Não Encontradas",
+                f"{str(e)}\n\n"
+                "Não foi possível iniciar o login porque o arquivo de credenciais da API do Google não foi localizado."
+            ))
         except Exception as e:
             err_msg = str(e)
             if "cancelado pelo usuário" in err_msg:
-                self.window.after(0, lambda: messagebox.showinfo("Login Cancelado", "O processo de login foi cancelado pelo usuário."))
-            elif "Timed out" in err_msg or "Tempo limite" in err_msg or "timed out" in err_msg.lower():
-                self.window.after(0, lambda: messagebox.showwarning("Tempo Limite Atingido", "O tempo limite para o login no navegador foi atingido (2 minutos). Por favor, tente novamente."))
+                self.window.after(0, lambda: messagebox.showinfo(
+                    "Login Cancelado",
+                    "O processo de login foi cancelado pelo usuário."
+                ))
+            elif "timed out" in err_msg.lower() or "tempo limite" in err_msg.lower():
+                self.window.after(0, lambda: messagebox.showwarning(
+                    "Tempo Limite Atingido",
+                    "O tempo limite para o login no navegador foi atingido (2 minutos).\nPor favor, tente novamente."
+                ))
+            elif "access_denied" in err_msg.lower() or "access denied" in err_msg.lower():
+                self.window.after(0, lambda: messagebox.showwarning(
+                    "Acesso Não Autorizado",
+                    "A autorização foi recusada ou cancelada no navegador.\n\n"
+                    "Caso tenha utilizado uma conta institucional (@universidade ou @empresa), "
+                    "a política de segurança da sua organização pode impedir a autorização de apps externos. "
+                    "Tente novamente utilizando uma conta pessoal (@gmail.com)."
+                ))
+            elif any(net_term in err_msg.lower() for net_term in ["failed to establish a new connection", "name or service not known", "getaddrinfo failed", "connection reset", "network is unreachable"]):
+                self.window.after(0, lambda: messagebox.showerror(
+                    "Erro de Conexão",
+                    "Não foi possível se conectar aos servidores do Google.\n\n"
+                    "Verifique sua conexão com a internet ou se há algum antivírus/firewall bloqueando a conexão."
+                ))
             else:
-                self.window.after(0, lambda: messagebox.showerror("Erro de Login", f"Ocorreu um erro ao fazer login:\n{err_msg}"))
-            
+                self.window.after(0, lambda: messagebox.showerror(
+                    "Erro de Login",
+                    f"Ocorreu um erro ao fazer login:\n{err_msg}"
+                ))
+        finally:
             self.window.after(0, self._restore_login_state)
 
     def cancel_login_action(self):
@@ -222,6 +267,56 @@ class MainWindow:
         if is_manual:
             messagebox.showinfo("Login com Sucesso", f"Bem-vindo, {user_name}!\nLogin realizado com sucesso.")
 
+    def _on_insufficient_permissions(self, exc):
+        self.creds = None
+        self.login_label.pack(before=self.status_label, pady=20)
+        self.status_label.config(
+            text="Status: Conta não conectada",
+            bootstyle="danger"
+        )
+        self.btn_login.config(state="normal", text="Fazer Login com Google")
+        self.btn_login.pack()
+        self.btn_cancel_login.pack_forget()
+        self.btn_logout.pack_forget()
+
+        self.notebook.tab(self.tab2, state="disabled")
+        self.notebook.tab(self.tab3, state="disabled")
+        self.notebook.select(self.tab1)
+
+        missing = getattr(exc, "missing_permissions", None) or ["Google Drive", "Google Formulários"]
+
+        motivos = []
+        if any("drive" in m.lower() for m in missing):
+            motivos.append("• Google Drive: criar a pasta onde os formulários e arquivos serão organizados e salvos.")
+        if any("form" in m.lower() for m in missing):
+            motivos.append("• Google Formulários: gerar automaticamente os questionários (Pré e Pós-teste) com as perguntas de comparação.")
+
+        if not motivos:
+            motivos = [
+                "• Google Drive: criar a pasta onde os formulários serão salvos.",
+                "• Google Formulários: gerar automaticamente os questionários de avaliação."
+            ]
+
+        motivos_str = "\n".join(motivos)
+
+        msg = (
+            "Não foi possível concluir o login porque as permissões essenciais não foram autorizadas na tela do Google.\n\n"
+            f"O aplicativo precisa das seguintes permissões para funcionar:\n"
+            f"{motivos_str}\n\n"
+            "Como resolver:\n"
+            "1. Clique no botão 'Fazer Login com Google' novamente.\n"
+            "2. Na janela do navegador que se abrir, selecione a sua conta.\n"
+            "3. Se aparecer a tela 'O Google não verificou este app', clique em 'Avançado' e depois em 'Acessar (não seguro)'.\n"
+            "4. Na tela de permissões ('O app quer acessar sua Conta do Google'), MARQUE TODAS AS CAIXINHAS de seleção do Google Drive e Google Formulários.\n"
+            "5. Clique no botão 'Continuar'.\n\n"
+            "Dica: Caso esteja usando um e-mail institucional (@universidade ou corporativo) e sua organização restrinja o acesso a apps externos, utilize uma conta pessoal (@gmail.com)."
+        )
+
+        messagebox.showwarning(
+            "Permissões Necessárias Não Concedidas",
+            msg
+        )
+
     def logout_account(self):
         if messagebox.askyesno("Confirmar Logout", "Deseja realmente desconectar sua conta do Google?"):
             try:
@@ -247,17 +342,56 @@ class MainWindow:
 
     def generate_forms(self):
         if not self.creds:
-            messagebox.showwarning("Login necessário", "Você precisa conectar uma conta Google.")
+            messagebox.showwarning("Login Necessário", "Você precisa conectar uma conta Google antes de gerar os formulários.")
             return
 
         text = self.text_area.get("1.0", tk.END).strip()
         if not text:
-            messagebox.showerror("Erro", "Digite ao menos um conceito.")
+            messagebox.showerror("Campos Vazios", "Por favor, digite os conceitos que deseja analisar (um por linha).")
             return
 
-        concepts = [line.strip() for line in text.split("\n") if line.strip()]
+        # Limpar linhas e remover vazios
+        raw_concepts = [line.strip() for line in text.split("\n") if line.strip()]
 
-        self.btn_generate.config(state="disabled", text="Gerando... Aguarde")
+        # Remover conceitos duplicados preservando a ordem
+        seen = set()
+        concepts = []
+        duplicates = []
+        for c in raw_concepts:
+            if c not in seen:
+                seen.add(c)
+                concepts.append(c)
+            else:
+                duplicates.append(c)
+
+        if len(concepts) < 2:
+            messagebox.showerror(
+                "Conceitos Insuficientes",
+                "São necessários pelo menos 2 conceitos diferentes para possibilitar a comparação par a par.\n\n"
+                f"Você informou apenas {len(concepts)} conceito(s) válido(s)."
+            )
+            return
+
+        total_pairs = len(concepts) * (len(concepts) - 1) // 2
+
+        if duplicates:
+            msg_dup = "Foram encontrados termos repetidos que foram unificados automaticamente:\n- " + "\n- ".join(duplicates[:5])
+            if len(duplicates) > 5:
+                msg_dup += f"\n... e mais {len(duplicates) - 5} termo(s)."
+            messagebox.showinfo("Termos Duplicados", msg_dup)
+
+        if total_pairs > 45:
+            confirm = messagebox.askyesno(
+                "Aviso de Volume",
+                f"Você inseriu {len(concepts)} conceitos, o que gerará {total_pairs} perguntas de escala por formulário.\n\n"
+                "Questionários com muitos pares podem ser cansativos para os respondentes.\n"
+                "Deseja continuar com a geração?",
+                parent=self.window
+            )
+            if not confirm:
+                return
+
+        self.btn_generate.config(state="disabled", text="Gerando Formulários... Aguarde")
         
         thread = threading.Thread(target=self._process_generation, args=(concepts,))
         thread.daemon = True
@@ -272,7 +406,42 @@ class MainWindow:
 
             self.window.after(0, self._on_generation_success)
         except Exception as e:
-            self.window.after(0, lambda: messagebox.showerror("Erro", str(e)))
+            err_msg = str(e)
+            
+            # Tratar erros da API do Google especificamente
+            from googleapiclient.errors import HttpError
+            if isinstance(e, HttpError):
+                status_code = e.resp.status
+                if status_code == 403:
+                    user_msg = (
+                        "Permissão negada pela API do Google (Erro 403).\n\n"
+                        "Possíveis causas:\n"
+                        "1. As permissões de acesso ao Google Drive ou Google Forms não foram concedidas durante o login.\n"
+                        "2. A API do Google Forms ('forms.googleapis.com') não está ativada no projeto do Google Cloud.\n"
+                        "3. Caso esteja utilizando uma conta institucional, sua organização pode bloquear a criação de arquivos via aplicativos externos."
+                    )
+                elif status_code == 429:
+                    user_msg = (
+                        "Limite de requisições do Google atingido temporariamente (Erro 429).\n\n"
+                        "Aguarde cerca de 2 minutos e tente gerar novamente."
+                    )
+                elif status_code == 401:
+                    user_msg = (
+                        "Sua sessão de login expirou ou foi revogada (Erro 401).\n\n"
+                        "Por favor, desconecte sua conta e faça login novamente."
+                    )
+                else:
+                    user_msg = f"Erro na API do Google (Código {status_code}):\n{e.reason or err_msg}"
+            elif any(net_term in err_msg.lower() for net_term in ["failed to establish a new connection", "getaddrinfo failed", "connection reset", "timed out", "network is unreachable"]):
+                user_msg = (
+                    "Falha de conexão com a internet.\n\n"
+                    "A conexão caiu enquanto os formulários estavam sendo criados no Google. "
+                    "Verifique sua rede e tente novamente."
+                )
+            else:
+                user_msg = f"Ocorreu um erro ao gerar os formulários:\n{err_msg}"
+
+            self.window.after(0, lambda: messagebox.showerror("Erro na Geração", user_msg))
             self.window.after(0, lambda: self.btn_generate.config(state="normal", text="Gerar Formulários (Pré e Pós)"))
 
     def _on_generation_success(self):
