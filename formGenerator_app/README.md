@@ -68,21 +68,38 @@ Siga os passos abaixo para operar a interface gráfica do programa e criar seus 
 ### Passo 1: Inicialização e Login
 1. Inicie o aplicativo (seja executando o arquivo consolidado `.exe` ou via terminal).
 2. Na aba **Passo 1: Autenticação**, clique no botão **Fazer Login com Google**.
-3. O aplicativo abrirá automaticamente o navegador padrão do seu sistema, solicitando que você escolha sua conta Google e dê as permissões necessárias (acesso para criar formulários no Google Drive).
+3. O aplicativo abrirá automaticamente o navegador padrão do seu sistema, solicitando que você escolha sua conta Google e conceda as permissões de acesso ao Google Drive e Formulários.
    
    > [!IMPORTANT]
-   > **Aviso de Aplicativo Não Verificado (Tela do Navegador):**
-   > Por se tratar de um cliente de API do Google Cloud de uso simples/pessoal e não verificado comercialmente pelo Google (o que não é necessário para este tipo de aplicação), o navegador exibirá um aviso de que *"O Google não verificou este app"* ao tentar fazer login.
+   > **1. Aviso de Aplicativo Não Verificado (Tela do Navegador):**
+   > Por se tratar de um cliente de API do Google Cloud de uso acadêmico/pessoal e não verificado comercialmente pelo Google (o que não é necessário para este tipo de aplicação), o navegador exibirá inicialmente um aviso de que *"O Google não verificou este app"*.
    >
    > Para prosseguir normalmente:
    > 1. Clique no link **Avançado** (*Advanced*) no canto inferior esquerdo da tela de aviso do Google.
    > 2. Clique no link **Acessar GeradorFormulario (não seguro)** (ou o nome do projeto correspondente).
-   > 3. Na tela seguinte, confirme as permissões marcando os campos necessários e clique em **Continuar**.
    >
    > #### Tela de Alerta do Google (Exemplo):
    > <img src="./docs/images/alerta_unverified_app.png" width="500">
    > <!--![Tela de Alerta de App Não Verificado](./docs/images/alerta_unverified_app.png) -->
-   > <!-- *(Insira aqui o screenshot da tela do navegador exibindo o aviso do Google de app não verificado)* -->
+
+   > [!WARNING]
+   > **2. Concessão de Permissões (Caixas de Seleção - Muito Importante!):**
+   > Na tela seguinte, o Google listará as permissões que o aplicativo precisa para funcionar, divididas em caixinhas de seleção (*checkboxes*):
+   > * *Ver, editar, criar e excluir todos os seus arquivos do Google Drive*
+   > * *Ver, editar, criar e excluir seus formulários do Google Forms*
+   > 
+   > **Atenção:** É **obrigatório marcar todas as caixas de seleção** antes de clicar em **Continuar**. Se você deixar alguma caixa desmarcada, o Google não concederá as permissões necessárias e o aplicativo não conseguirá criar os formulários no seu Drive.
+
+   > [!NOTE]
+   > **Por que as permissões tendem a ser pedidas apenas no primeiro login?**
+   > * Na primeira vez que você faz login com uma conta Google, ela exige o consentimento explícito dessas permissões.
+   > * Uma vez concedidas, o Google armazena esse consentimento associado ao seu e-mail. Por isso, nos logins seguintes (mesmo que você clique em *Desconectar / Trocar de Conta* e entre de novo com o mesmo e-mail), o Google pode aprovar a conexão diretamente sem exibir as caixinhas novamente.
+   > * O aplicativo força a reexibição da tela de consentimento a cada novo login manual para garantir que, caso você tenha esquecido de marcar alguma caixa na primeira vez, tenha a oportunidade de marcar todas.
+   > * Se quiser revogar totalmente o acesso do aplicativo para recomeçar do zero, você pode gerenciar suas conexões em [myaccount.google.com/connections](https://myaccount.google.com/connections).
+
+   > [!TIP]
+   > **Contas Pessoais vs. Contas Institucionais (@universidade / @empresa):**
+   > Se você tentar utilizar um e-mail institucional (ex.: `@aluno.faculdade.edu.br` ou e-mails corporativos), os administradores de TI da sua organização podem ter políticas de segurança que bloqueiam aplicativos de terceiros não homologados. Se isso acontecer, utilize uma conta pessoal comum (`@gmail.com`).
 
 4. Uma vez autorizado, o navegador exibirá uma mensagem de sucesso e você poderá retornar à janela do aplicativo.
 5. O status na interface mudará para **Conectado como: [Seu Nome]** e o botão de logout/desconexão ficará visível caso deseje trocar de conta.
